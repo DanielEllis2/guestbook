@@ -1903,7 +1903,7 @@ function showBookingConflictError(room, clash){
 
 // ── VOUCHER AUTO-FILL ─────────────────────────────────────
 async function readVoucherPdf(){
-  const file=window._pdfFiles&&window._pdfFiles.voucher;
+  const file=window._scanVoucherFile;
   if(!file){showToast('Please select a voucher PDF first','error');return;}
   const btn=document.getElementById('read-voucher-btn');
   if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Reading voucher...';}
@@ -1986,6 +1986,45 @@ document.addEventListener('wheel', function(e){
     document.activeElement.blur();
   }
 }, {passive:false});
+
+function handleScanVoucherSelect(input){
+  const file=input.files&&input.files[0];
+  if(!file)return;
+  window._scanVoucherFile=file;
+  // Update scan box UI
+  const box=document.getElementById('scan-voucher-pdf-box');
+  const nameEl=document.getElementById('scan-voucher-pdf-name');
+  const removeBtn=document.getElementById('scan-voucher-pdf-remove');
+  if(box)box.classList.add('has-file');
+  if(nameEl)nameEl.textContent=file.name;
+  if(removeBtn)removeBtn.style.display='flex';
+  // Show the Read Voucher button
+  const row=document.getElementById('read-voucher-row');
+  if(row)row.style.display='block';
+  // Also attach the same file to the bottom voucher PDF slot automatically
+  window._pdfFiles=window._pdfFiles||{invoice:null,voucher:null,aroma:null};
+  window._pdfFiles.voucher=file;
+  const vBox=document.getElementById('voucher-pdf-box');
+  const vName=document.getElementById('voucher-pdf-name');
+  const vRemove=document.getElementById('voucher-pdf-remove');
+  if(vBox)vBox.classList.add('has-file');
+  if(vName)vName.textContent=file.name;
+  if(vRemove)vRemove.style.display='flex';
+}
+
+function removeScanVoucher(){
+  window._scanVoucherFile=null;
+  const box=document.getElementById('scan-voucher-pdf-box');
+  const nameEl=document.getElementById('scan-voucher-pdf-name');
+  const removeBtn=document.getElementById('scan-voucher-pdf-remove');
+  const input=document.getElementById('scan-voucher-pdf-input');
+  if(box)box.classList.remove('has-file');
+  if(nameEl)nameEl.textContent='Click to select voucher PDF';
+  if(removeBtn)removeBtn.style.display='none';
+  if(input)input.value='';
+  const row=document.getElementById('read-voucher-row');
+  if(row)row.style.display='none';
+}
 function closeModal(){document.getElementById('modal-container').innerHTML='';}
 
 // ── ADD / EDIT MODAL ──────────────────────────────────────
@@ -2008,12 +2047,12 @@ function openAddModal(dateStr,room,ovf){
             <span style="font-size:11px;color:var(--muted);font-weight:400;">— fields fill in automatically</span>
           </div>
           <div class="pdf-upload-row" style="margin:0;">
-            <label class="pdf-upload-box" id="voucher-pdf-box" for="voucher-pdf-input" style="border-color:var(--overflow-border);">
+            <label class="pdf-upload-box" id="scan-voucher-pdf-box" for="scan-voucher-pdf-input" style="border-color:var(--overflow-border);">
               <i class="ti ti-upload" style="font-size:13px"></i>
-              <span id="voucher-pdf-name">Click to select voucher PDF</span>
-              <input type="file" id="voucher-pdf-input" accept="application/pdf" onchange="handlePdfSelect('voucher',this)" />
+              <span id="scan-voucher-pdf-name">Click to select voucher PDF</span>
+              <input type="file" id="scan-voucher-pdf-input" accept="application/pdf" onchange="handleScanVoucherSelect(this)" />
             </label>
-            <button class="pdf-remove-btn" id="voucher-pdf-remove" style="display:none" onclick="removePdf('voucher')" title="Remove">✕</button>
+            <button class="pdf-remove-btn" id="scan-voucher-pdf-remove" style="display:none" onclick="removeScanVoucher()" title="Remove">✕</button>
           </div>
           <div id="read-voucher-row" style="display:none;">
             <button onclick="readVoucherPdf()" id="read-voucher-btn" style="width:100%;padding:9px 14px;background:linear-gradient(135deg,var(--overflow-border),#6d28d9);color:#fff;border:none;border-radius:8px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s;">
