@@ -4637,39 +4637,27 @@ function calcMealTotal(){
 
 // ── CASHBOOK ──────────────────────────────────────────────
 
-function populateCashbookTable(entries){
-  const body=document.getElementById('cashbook-body');
-  if(!body)return;
-  if(!entries.length){
-    body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">No meal allowances found for this period</td></tr>`;
-    const tot=document.getElementById('cashbook-monthly-total');if(tot)tot.textContent='R 0.00';
-    return;
-  }
-  let total=0;
-  let html='';
-  entries.forEach(b=>{
-    const daily=(parseFloat(b.meal_breakfast)||0)+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0);
-    const nights=b.checkin&&b.checkout?Math.round((new Date(b.checkout)-new Date(b.checkin))/(1000*60*60*24)):1;
-    const rowTotal=daily*Math.max(nights,1);
-    total+=rowTotal;
-    const d=parseDate(b.checkin);
-    const dateStr=`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-    html+=`<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:10px 14px;font-size:13px;color:var(--muted);white-space:nowrap;">${dateStr}</td>
-      <td style="padding:10px 14px;font-size:13px;font-family:var(--mono);color:var(--accent);font-weight:500;">${b.invoice||'—'}</td>
-      <td style="padding:10px 14px;font-size:13px;font-weight:600;color:var(--text);">${b.name}</td>
-      <td style="padding:10px 14px;font-size:13px;color:var(--muted);">${nights} night${nights!==1?'s':''}</td>
-      <td style="padding:10px 14px;font-size:14px;font-weight:700;color:var(--text);text-align:right;">R ${rowTotal.toFixed(2)}</td>
-    </tr>`;
-  });
-  body.innerHTML=html;
-  const tot=document.getElementById('cashbook-monthly-total');
-  if(tot)tot.textContent=`R ${total.toFixed(2)}`;
+function populateCashbookTable(entries){ /* replaced */ }
+
+// ── CASHBOOK: ALL LOGIC ───────────────────────────────────
+function cashbookNavigate(dir){currentDate.setMonth(currentDate.getMonth()+dir);renderCashbook();}
+
+function clearCashbookDates(){
+  const f=document.getElementById('cb-date-from');const t=document.getElementById('cb-date-to');
+  if(f)f.value='';if(t)t.value='';
+  renderCashbook();
 }
+
+async function renderCashbookCustom(){
+  const from=(document.getElementById('cb-date-from')||{}).value;
+  const to=(document.getElementById('cb-date-to')||{}).value;
+  if(from&&to)await renderCashbookRange(from,to);
+}
+
 async function renderCashbook(){
   console.log('renderCashbook called');
   const body=document.getElementById('cashbook-body');
-  if(!body){console.log('cashbook-body element NOT FOUND');return;}
+  if(!body){console.log('cashbook-body NOT FOUND');return;}
   body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td></tr>`;
 
   const year=currentDate.getFullYear();
@@ -4680,55 +4668,7 @@ async function renderCashbook(){
   const lbl=document.getElementById('cashbook-month-label');
   if(lbl)lbl.textContent=`${MONTHS[month]} ${year}`;
 
-  // Single query — fetch ALL bookings in month, filter client-side for any meal
-  const {data,error}=await sb.from('bookings')
-    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,room')
-    .gte('checkin',monthStart)
-    .lte('checkin',monthEnd)
-    .order('checkin',{ascending:true});
-
-  if(error){
-    if(body)body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:#dc2626;">Error: ${error.message}</td></tr>`;
-    return;
-  }
-
-  // Filter to only bookings that have at least one meal amount, deduplicate by name+checkin
-  const seen=new Set();
-  const unique=[];
-  (data||[]).forEach(b=>{
-    const key=`${b.name}__${b.checkin}`;
-    const hasMeal=(parseFloat(b.meal_breakfast)||0)+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0)>0;
-    if(!seen.has(key)&&hasMeal){seen.add(key);unique.push(b);}
-  });
-  unique.sort((a,b)=>a.checkin.localeCompare(b.checkin));
-
-  if(!body)return;
-  if(!unique.length){
-    body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">No meal allowances recorded for ${MONTHS[month]} ${year}</td></tr>`;
-    const tot=document.getElementById('cashbook-monthly-total');
-    if(tot)tot.textContent='R 0.00';
-    return;
-  }
-
-  const totalLbl=document.getElementById('cashbook-total-label');
-  if(totalLbl)totalLbl.textContent='Monthly Total';
-  populateCashbookTable(unique);
-}
-
-// ── CASHBOOK HELPERS ──────────────────────────────────────
-function cashbookNavigate(dir){currentDate.setMonth(currentDate.getMonth()+dir);renderCashbook();}
-
-function clearCashbookDates(){
-  const f=document.getElementById('cb-date-from');const t=document.getElementById('cb-date-to');
-  if(f)f.value='';if(t)t.value='';
-  const lbl=document.getElementById('cashbook-total-label');if(lbl)lbl.textContent='Monthly Total';
-  renderCashbook();
-}
-
-async function renderCashbookCustom(){
-  const from=(document.getElementById('cb-date-from')||{}).value;
-  const to=(document.getElementById('cb-date-to')||{}).value;
-  if(from&&to)await renderCashbookRange(from,to);
+  await loadAndRenderCashbookEntries(monthStart, monthEnd);
 }
 
 async function renderCashbookRange(fromDate,toDate){
@@ -4736,28 +4676,188 @@ async function renderCashbookRange(fromDate,toDate){
   if(body)body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td></tr>`;
   const lbl=document.getElementById('cashbook-month-label');
   if(lbl){const f=parseDate(fromDate);const t=parseDate(toDate);lbl.textContent=`${f.getDate()} ${MONTHS[f.getMonth()].slice(0,3)} — ${t.getDate()} ${MONTHS[t.getMonth()].slice(0,3)} ${t.getFullYear()}`;}
-  const lbl2=document.getElementById('cashbook-total-label');if(lbl2)lbl2.textContent='Period Total';
-  const {data,error}=await sb.from('bookings').select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,room').gte('checkin',fromDate).lte('checkin',toDate).order('checkin',{ascending:true});
-  if(error){if(body)body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:#dc2626;">Error: ${error.message}</td></tr>`;return;}
-  const seen=new Set();const unique=[];
-  (data||[]).forEach(b=>{const key=`${b.name}__${b.checkin}`;const hasMeal=(parseFloat(b.meal_breakfast)||0)+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0)>0;if(!seen.has(key)&&hasMeal){seen.add(key);unique.push(b);}});
-  unique.sort((a,b)=>a.checkin.localeCompare(b.checkin));
-  populateCashbookTable(unique);
+  await loadAndRenderCashbookEntries(fromDate,toDate);
+}
+
+async function loadAndRenderCashbookEntries(fromDate, toDate){
+  const body=document.getElementById('cashbook-body');
+
+  // Fetch meal bookings (debits)
+  const {data:bookingData,error:bErr}=await sb.from('bookings')
+    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner')
+    .gte('checkin',fromDate).lte('checkin',toDate)
+    .order('checkin',{ascending:true});
+
+  if(bErr){
+    if(body)body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:#dc2626;">Error loading bookings: ${bErr.message}</td></tr>`;
+    return;
+  }
+
+  // Fetch fund deposits (credits) from cashbook_funds table
+  const {data:fundsData,error:fErr}=await sb.from('cashbook_funds')
+    .select('*').gte('fund_date',fromDate).lte('fund_date',toDate)
+    .order('fund_date',{ascending:true});
+
+  // Build meal entries (one per unique guest stay)
+  const seen=new Set();
+  const debits=[];
+  (bookingData||[]).forEach(b=>{
+    const key=`${b.name}__${b.checkin}`;
+    const daily=(parseFloat(b.meal_breakfast)||0)+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0);
+    if(!seen.has(key)&&daily>0){
+      seen.add(key);
+      const nights=b.checkin&&b.checkout?Math.max(Math.round((new Date(b.checkout)-new Date(b.checkin))/(1000*60*60*24)),1):1;
+      debits.push({date:b.checkin,type:'debit',desc:`${b.invoice||'—'} — ${b.name}`,amount:daily*nights,nights});
+    }
+  });
+
+  // Build fund entries
+  const credits=(fundsData||[]).map(f=>({date:f.fund_date,type:'credit',desc:f.notes||'Funds deposited',amount:parseFloat(f.amount),id:f.id}));
+
+  // Merge and sort by date
+  const allEntries=[...debits,...credits].sort((a,b)=>{
+    if(a.date===b.date) return a.type==='credit'?-1:1; // credits first on same day
+    return a.date.localeCompare(b.date);
+  });
+
+  if(!allEntries.length){
+    if(body)body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">No entries for this period</td></tr>`;
+    updateCashbookSummary(0,0);
+    return;
+  }
+
+  let balance=0;
+  let totalIn=0;
+  let totalOut=0;
+  let html='';
+
+  allEntries.forEach(entry=>{
+    const d=parseDate(entry.date);
+    const dateStr=`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+    if(entry.type==='credit'){
+      balance+=entry.amount;
+      totalIn+=entry.amount;
+      html+=`<tr style="border-bottom:1px solid var(--border);background:rgba(45,90,61,.04);">
+        <td style="padding:10px 14px;font-size:13px;color:var(--muted);white-space:nowrap;">${dateStr}</td>
+        <td style="padding:10px 14px;font-size:13px;color:var(--text);">${entry.desc} <button onclick="deleteCashbookFund('${entry.id}')" style="margin-left:6px;padding:1px 6px;font-size:10px;border:1px solid var(--border);background:var(--surface2);border-radius:4px;cursor:pointer;color:var(--muted);">✕</button></td>
+        <td style="padding:10px 14px;text-align:right;color:var(--muted);">—</td>
+        <td style="padding:10px 14px;text-align:right;font-size:13px;font-weight:700;color:var(--accent);">R ${entry.amount.toFixed(2)}</td>
+        <td style="padding:10px 14px;text-align:right;font-size:13px;font-weight:700;color:${balance<0?'#dc2626':'var(--accent)'};">R ${balance.toFixed(2)}</td>
+      </tr>`;
+    } else {
+      balance-=entry.amount;
+      totalOut+=entry.amount;
+      html+=`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 14px;font-size:13px;color:var(--muted);white-space:nowrap;">${dateStr}</td>
+        <td style="padding:10px 14px;font-size:13px;color:var(--text);">${entry.desc}</td>
+        <td style="padding:10px 14px;text-align:right;font-size:13px;font-weight:700;color:#dc2626;">R ${entry.amount.toFixed(2)}</td>
+        <td style="padding:10px 14px;text-align:right;color:var(--muted);">—</td>
+        <td style="padding:10px 14px;text-align:right;font-size:13px;font-weight:700;color:${balance<0?'#dc2626':'var(--accent)'};">R ${balance.toFixed(2)}</td>
+      </tr>`;
+    }
+  });
+
+  if(body)body.innerHTML=html;
+  updateCashbookSummary(totalIn,totalOut,balance);
+}
+
+function updateCashbookSummary(totalIn,totalOut,balance=0){
+  const inEl=document.getElementById('cb-total-in');
+  const outEl=document.getElementById('cb-total-out');
+  const balEl=document.getElementById('cb-balance');
+  if(inEl)inEl.textContent=`R ${totalIn.toFixed(2)}`;
+  if(outEl)outEl.textContent=`R ${totalOut.toFixed(2)}`;
+  if(balEl){
+    balEl.textContent=`R ${balance.toFixed(2)}`;
+    balEl.style.color=balance<0?'#dc2626':balance===0?'var(--muted)':'var(--accent)';
+    const card=balEl.parentElement;
+    if(card)card.style.borderColor=balance<0?'#fca5a5':balance===0?'var(--border)':'var(--accent)';
+  }
+}
+
+function openAddFundsModal(){
+  const today=dateKey(new Date());
+  document.getElementById('modal-container').innerHTML=`
+    <div class="modal-backdrop" onclick="if(event.target===this)closeModal()">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+          <div><div class="modal-title" style="display:flex;align-items:center;gap:8px;"><i class="ti ti-plus" style="color:var(--accent)"></i> Add Funds to Cashbook</div>
+          <div class="modal-subtitle">Record a cash deposit for meal payouts</div></div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group full"><label class="form-label">Date *</label>
+            <input class="form-input" id="fund-date" type="date" value="${today}" /></div>
+          <div class="form-group full"><label class="form-label">Amount (R) *</label>
+            <input class="form-input" id="fund-amount" type="number" placeholder="0.00" style="font-size:18px;font-weight:600;" /></div>
+          <div class="form-group full"><label class="form-label">Notes</label>
+            <input class="form-input" id="fund-notes" placeholder="e.g. Cash deposited from bank" /></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn-primary" id="fund-save-btn" onclick="saveCashbookFund()"><i class="ti ti-plus"></i> Add Funds</button>
+        </div>
+      </div>
+    </div>`;
+  setTimeout(()=>{const a=document.getElementById('fund-amount');if(a)a.focus();},50);
+}
+
+async function saveCashbookFund(){
+  const date=document.getElementById('fund-date').value;
+  const amount=parseFloat(document.getElementById('fund-amount').value);
+  const notes=document.getElementById('fund-notes').value.trim();
+  if(!date){showToast('Please enter a date','error');return;}
+  if(!amount||amount<=0){showToast('Please enter a valid amount','error');return;}
+  const btn=document.getElementById('fund-save-btn');
+  btn.disabled=true;btn.textContent='Saving...';
+  const {error}=await sb.from('cashbook_funds').insert({fund_date:date,amount,notes:notes||null});
+  if(error){showToast('Error saving: '+error.message,'error');btn.disabled=false;btn.textContent='Add Funds';return;}
+  showToast(`R ${amount.toFixed(2)} added to cashbook!`);
+  closeModal();
+  renderCashbook();
+}
+
+async function deleteCashbookFund(id){
+  if(!confirm('Remove this deposit entry?'))return;
+  const {error}=await sb.from('cashbook_funds').delete().eq('id',id);
+  if(error){showToast('Error deleting','error');return;}
+  showToast('Entry removed');
+  renderCashbook();
 }
 
 function printCashbook(){
   const periodLabel=(document.getElementById('cashbook-month-label')||{}).textContent||'';
-  const totalLabel=(document.getElementById('cashbook-total-label')||{}).textContent||'Total';
-  const totalVal=(document.getElementById('cashbook-monthly-total')||{}).textContent||'R 0.00';
+  const totalIn=(document.getElementById('cb-total-in')||{}).textContent||'R 0.00';
+  const totalOut=(document.getElementById('cb-total-out')||{}).textContent||'R 0.00';
+  const balance=(document.getElementById('cb-balance')||{}).textContent||'R 0.00';
   let rowsHtml='';
   [...document.querySelectorAll('#cashbook-body tr')].forEach(row=>{
     const cells=[...row.querySelectorAll('td')];
-    if(cells.length===5)rowsHtml+=`<tr><td>${cells[0].textContent}</td><td>${cells[1].textContent}</td><td>${cells[2].textContent}</td><td>${cells[3].textContent}</td><td style="text-align:right;font-weight:700;">${cells[4].textContent}</td></tr>`;
+    if(cells.length===5){
+      // Strip the delete button text from description
+      const desc=cells[1].textContent.replace('✕','').trim();
+      const isCredit=cells[2].textContent.trim()==='—';
+      rowsHtml+=`<tr class="${isCredit?'credit':'debit'}">
+        <td>${cells[0].textContent}</td><td>${desc}</td>
+        <td style="text-align:right;">${cells[2].textContent}</td>
+        <td style="text-align:right;">${cells[3].textContent}</td>
+        <td style="text-align:right;font-weight:700;">${cells[4].textContent}</td>
+      </tr>`;
+    }
   });
-  const win=window.open('','_blank','width=900,height=700');
-  win.document.write(`<!DOCTYPE html><html><head><title>Meal Cashbook — ${periodLabel}</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1a1714;padding:32px;}.hdr{display:flex;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #2d5a3d;}.logo{font-size:20px;font-weight:700;color:#2d5a3d;}.meta{text-align:right;font-size:12px;color:#7a746b;}table{width:100%;border-collapse:collapse;}thead tr{background:#f0ede6;border-bottom:2px solid #2d5a3d;}th{padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:#7a746b;text-transform:uppercase;}th:last-child{text-align:right;}tbody tr{border-bottom:1px solid #e2ddd4;}tbody tr:nth-child(even){background:#fafaf8;}td{padding:9px 12px;}tfoot tr{background:#f0ede6;border-top:2px solid #2d5a3d;}tfoot td{padding:10px 12px;font-size:14px;font-weight:700;}tfoot td:last-child{text-align:right;font-size:16px;font-weight:800;color:#2d5a3d;}.footer{margin-top:24px;font-size:11px;color:#7a746b;text-align:center;border-top:1px solid #e2ddd4;padding-top:10px;}</style></head><body><div class="hdr"><div><div class="logo">Aroma Guesthouse · Meal Cashbook</div><div style="font-size:12px;color:#7a746b;margin-top:4px;">054 332 5448 · info@aromastay.co.za</div></div><div class="meta"><strong>${periodLabel}</strong>Printed: ${new Date().toLocaleDateString('en-ZA',{day:'2-digit',month:'long',year:'numeric'})}</div></div><table><thead><tr><th>Date</th><th>Invoice #</th><th>Guest Name</th><th>Nights</th><th style="text-align:right;">Total Meals</th></tr></thead><tbody>${rowsHtml}</tbody><tfoot><tr><td colspan="4">${totalLabel}</td><td>${totalVal}</td></tr></tfoot></table><div class="footer">Aroma Guesthouse · 58 Borcherd Street, Upington · bookings.aromastay.co.za</div></body></html>`);
+  const win=window.open('','_blank','width=960,height=700');
+  win.document.write(`<!DOCTYPE html><html><head><title>Meal Cashbook — ${periodLabel}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1a1714;padding:32px;}.hdr{display:flex;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #2d5a3d;}.logo{font-size:20px;font-weight:700;color:#2d5a3d;}.meta{text-align:right;font-size:12px;color:#7a746b;}.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}.sum-card{border:1px solid #e2ddd4;border-radius:8px;padding:10px 14px;}.sum-label{font-size:10px;font-weight:600;color:#7a746b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}.sum-val{font-size:18px;font-weight:800;}table{width:100%;border-collapse:collapse;}thead tr{background:#f0ede6;border-bottom:2px solid #2d5a3d;}th{padding:8px 12px;text-align:left;font-size:10px;font-weight:600;color:#7a746b;text-transform:uppercase;}th:last-child,th:nth-child(3),th:nth-child(4){text-align:right;}tbody tr{border-bottom:1px solid #e2ddd4;}tbody tr.credit{background:rgba(45,90,61,.04);}td{padding:8px 12px;font-size:12px;}.footer{margin-top:24px;font-size:11px;color:#7a746b;text-align:center;border-top:1px solid #e2ddd4;padding-top:10px;}</style>
+  </head><body>
+  <div class="hdr"><div><div class="logo">Aroma Guesthouse · Meal Cashbook</div><div style="font-size:12px;color:#7a746b;margin-top:4px;">054 332 5448 · info@aromastay.co.za</div></div><div class="meta"><strong>${periodLabel}</strong>Printed: ${new Date().toLocaleDateString('en-ZA',{day:'2-digit',month:'long',year:'numeric'})}</div></div>
+  <div class="summary"><div class="sum-card"><div class="sum-label">Total Deposited</div><div class="sum-val" style="color:#2d5a3d;">${totalIn}</div></div><div class="sum-card"><div class="sum-label">Total Paid Out</div><div class="sum-val" style="color:#dc2626;">${totalOut}</div></div><div class="sum-card" style="border-color:#2d5a3d;"><div class="sum-label">Balance</div><div class="sum-val">${balance}</div></div></div>
+  <table><thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Debit (Out)</th><th style="text-align:right;">Credit (In)</th><th style="text-align:right;">Balance</th></tr></thead>
+  <tbody>${rowsHtml}</tbody></table>
+  <div class="footer">Aroma Guesthouse · 58 Borcherd Street, Upington · bookings.aromastay.co.za</div>
+  </body></html>`);
   win.document.close();win.focus();setTimeout(()=>win.print(),400);
 }
+
 </script>
 
 <div id="cashbook-page" class="page">
@@ -4778,11 +4878,11 @@ function printCashbook(){
       <button class="icon-btn" onclick="cashbookNavigate(1)"><i class="ti ti-chevron-right"></i></button>
     </div>
   </div>
-  <div class="page-body" style="max-width:900px;">
+  <div class="page-body" style="max-width:960px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
       <div>
         <div class="page-title">Meal Allowance Cashbook</div>
-        <div class="page-subtitle">Meals paid out to guests — one line per booking</div>
+        <div class="page-subtitle">Running balance — deposits in, meal payouts out</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;">
@@ -4791,30 +4891,42 @@ function printCashbook(){
           <label style="font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap;">To</label>
           <input type="date" id="cb-date-to" class="form-input" style="padding:4px 8px;font-size:12px;border:none;background:transparent;outline:none;width:130px;" onchange="renderCashbookCustom()" />
         </div>
-        <button onclick="clearCashbookDates()" style="padding:7px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-family:var(--font);font-size:12px;cursor:pointer;color:var(--muted);" title="Clear custom dates"><i class="ti ti-x" style="font-size:12px"></i></button>
-        <button onclick="printCashbook()" style="padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="ti ti-printer" style="font-size:14px"></i> Print</button>
+        <button onclick="clearCashbookDates()" style="padding:7px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-family:var(--font);font-size:12px;cursor:pointer;color:var(--muted);" title="Clear date filter"><i class="ti ti-x" style="font-size:12px"></i></button>
+        <button onclick="openAddFundsModal()" style="padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="ti ti-plus" style="font-size:14px"></i> Add Funds</button>
+        <button onclick="printCashbook()" style="padding:7px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--text);"><i class="ti ti-printer" style="font-size:14px"></i> Print</button>
       </div>
     </div>
+
+    <!-- Running balance card -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Total Deposited</div>
+        <div id="cb-total-in" style="font-size:20px;font-weight:800;color:var(--accent);">R 0.00</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Total Paid Out</div>
+        <div id="cb-total-out" style="font-size:20px;font-weight:800;color:#dc2626;">R 0.00</div>
+      </div>
+      <div style="background:var(--surface);border:2px solid var(--border);border-radius:10px;padding:14px 16px;">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Current Balance</div>
+        <div id="cb-balance" style="font-size:20px;font-weight:800;color:var(--text);">R 0.00</div>
+      </div>
+    </div>
+
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
           <tr style="background:var(--surface2);border-bottom:2px solid var(--border);">
-            <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Date</th>
-            <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Invoice #</th>
-            <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Guest Name</th>
-            <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Nights</th>
-            <th style="padding:10px 14px;text-align:right;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Total Meals</th>
+            <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Date</th>
+            <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Description</th>
+            <th style="padding:10px 14px;text-align:right;font-size:11px;font-weight:600;color:#dc2626;text-transform:uppercase;letter-spacing:.5px;">Debit (Out)</th>
+            <th style="padding:10px 14px;text-align:right;font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;">Credit (In)</th>
+            <th style="padding:10px 14px;text-align:right;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Balance</th>
           </tr>
         </thead>
         <tbody id="cashbook-body">
           <tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td></tr>
         </tbody>
-        <tfoot>
-          <tr style="background:var(--surface2);border-top:2px solid var(--border);">
-            <td colspan="4" style="padding:12px 14px;font-size:14px;font-weight:700;color:var(--text);" id="cashbook-total-label">Monthly Total</td>
-            <td style="padding:12px 14px;font-size:16px;font-weight:800;color:var(--text);text-align:right;" id="cashbook-monthly-total">R 0.00</td>
-          </tr>
-        </tfoot>
       </table>
     </div>
   </div>
