@@ -39,7 +39,7 @@ body.dark .cell.occupied:not(.checked-in){background:#1e2a45;border-color:#4b6cb
 body.dark .cell.occupied:not(.checked-in) .cell-name{color:#93b4e8;}
 body.dark .cell.occupied:not(.checked-in) .cell-company{color:#6b8ec4;}
 body.dark .cell.occupied.unpaid:not(.checked-in){background:linear-gradient(135deg,#1e2a45 60%,#450a0a 100%);}
-body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;height:100vh;overflow:hidden;transition:background .2s,color .2s;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;min-height:100vh;transition:background .2s,color .2s;}
 
 /* DARK MODE TOGGLE */
 .theme-btn{width:32px;height:32px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:all .15s;font-size:16px;}
@@ -135,7 +135,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .ld-overflow{background:var(--overflow-bg);border:1px solid var(--overflow-border);}
 
 /* GRID */
-.grid-container{flex:1;overflow:auto;padding:16px;min-height:0;}
+.grid-container{flex:1;overflow:auto;padding:16px;}
 .week-table,.month-table{border-collapse:separate;border-spacing:2px;min-width:max-content;}
 /* Sticky thead — keeps room numbers visible when scrolling down */
 .week-table thead tr th,.month-table thead tr th{position:sticky;top:0;z-index:3;background:var(--bg);}
@@ -264,7 +264,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 mark{background:#fef08a;border-radius:2px;}
 
 /* COMPANIES PAGE */
-.page{display:none;flex-direction:column;height:100vh;overflow:hidden;}
+.page{display:none;flex-direction:column;min-height:100vh;}
 .page.active{display:flex;}
 .page-body{flex:1;padding:24px;max-width:900px;margin:0 auto;width:100%;}
 .page-title{font-size:20px;font-weight:600;margin-bottom:4px;}
@@ -545,7 +545,7 @@ input,select,textarea{font-size:16px;}
   <div class="loader-text">Loading GuestBook...</div>
 </div>
 
-<div id="app" style="display:none;flex-direction:column;height:100vh;overflow:hidden;">
+<div id="app" style="display:none;flex-direction:column;min-height:100vh;">
   <!-- Mobile nav drawer -->
   <div id="mobile-nav-drawer" class="mobile-nav-drawer" onclick="if(event.target===this)closeMobileNav()">
     <div class="mobile-nav-panel">
