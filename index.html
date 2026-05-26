@@ -34,6 +34,11 @@ body.dark{
   --overflow-bg:#2e1065;--overflow-border:#a78bfa;--overflow-text:#c4b5fd;--overflow-head:#1e1b4b;
   --shadow:0 1px 3px rgba(0,0,0,.4);
 }
+/* Dark mode check-in colour overrides */
+body.dark .cell.occupied:not(.checked-in){background:#1e2a45;border-color:#4b6cb7;}
+body.dark .cell.occupied:not(.checked-in) .cell-name{color:#93b4e8;}
+body.dark .cell.occupied:not(.checked-in) .cell-company{color:#6b8ec4;}
+body.dark .cell.occupied.unpaid:not(.checked-in){background:linear-gradient(135deg,#1e2a45 60%,#450a0a 100%);}
 body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;height:100vh;overflow:hidden;transition:background .2s,color .2s;}
 
 /* DARK MODE TOGGLE */
