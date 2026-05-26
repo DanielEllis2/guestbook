@@ -2739,11 +2739,14 @@ function editBooking(dateStr,room){
       window._existingInvoicePdfUrl=(!window._pdfFiles.invoice&&!window._clearInvoicePdf)?b.invoice_pdf_url||null:null;
       window._existingVoucherPdfUrl=(!window._pdfFiles.voucher&&!window._clearVoucherPdf)?b.voucher_pdf_url||null:null;
       window._existingAromaPdfUrl=(!window._pdfFiles.aroma&&!window._clearAromaPdf)?b.aroma_pdf_url||null:null;
-      // Delete old records first then save new
-      // Use getBooking() since bookings is now an array per key
+      // Delete ALL old records for this room+date range first, then save new
       const bOld=getBooking(dateStr,room);
       if(bOld){
-        const{data}=await sb.from('bookings').select('id').eq('room',room).eq('name',bOld.name).gte('booking_date',bOld.checkin||dateStr).lte('booking_date',bOld.checkout||dateStr);
+        // Delete by room+date range only (not by name) so renaming works correctly
+        const checkinDate=bOld.checkin||dateStr;
+        const checkoutDate=bOld.checkout||dateStr;
+        const{data}=await sb.from('bookings').select('id').eq('room',room)
+          .gte('booking_date',checkinDate).lte('booking_date',checkoutDate);
         await deleteBookingFromDB((data||[]).map(r=>r.id));
       }
       await saveBooking(dateStr,room,ovf);
