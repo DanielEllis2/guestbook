@@ -1030,7 +1030,11 @@ async function loadAndRender(silent=false){
 }
 
 function showGridLoader(){
-  document.getElementById('grid-container').innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;gap:10px;color:var(--muted)"><div class="loader-spinner"></div> Loading...</div>`;
+  // Save scroll position before showing loader
+  const gc=document.getElementById('grid-container');
+  window._savedScrollX=gc?gc.scrollLeft:0;
+  window._savedScrollY=gc?gc.scrollTop:0;
+  if(gc)gc.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;gap:10px;color:var(--muted)"><div class="loader-spinner"></div> Loading...</div>`;
 }
 
 let searchTimer=null;
@@ -1279,7 +1283,12 @@ function renderWeek(){
     html+=`</tr>`;
   });
   html+=`</tbody></table>`;
-  document.getElementById('grid-container').innerHTML=html;
+  const gc=document.getElementById('grid-container');
+  const sx=window._savedScrollX||0;
+  const sy=window._savedScrollY||0;
+  window._savedScrollX=0;window._savedScrollY=0;
+  if(gc)gc.innerHTML=html;
+  if(gc){gc.scrollLeft=sx;gc.scrollTop=sy;}
 }
 
 // ── RENDER MONTH ──────────────────────────────────────────
@@ -1323,7 +1332,12 @@ function renderMonth(){
     });
   }
   html+=`</tbody></table>`;
-  document.getElementById('grid-container').innerHTML=html;
+  const gc=document.getElementById('grid-container');
+  const sx=window._savedScrollX||0;
+  const sy=window._savedScrollY||0;
+  window._savedScrollX=0;window._savedScrollY=0;
+  if(gc)gc.innerHTML=html;
+  if(gc){gc.scrollLeft=sx;gc.scrollTop=sy;}
 }
 
 function matchSearch(b){
@@ -2170,8 +2184,7 @@ function openAddModal(dateStr,room,ovf){
     <div class="status-row">
       <span class="status-badge paid" id="sb-paid" onclick="toggleStatus('paid')">Paid</span>
       <span class="status-badge unpaid active" id="sb-unpaid" onclick="toggleStatus('unpaid')">Unpaid</span>
-      ${!isOvf?`<span class="status-badge clean active" id="sb-clean" onclick="toggleStatus('clean')">Clean</span>
-      <span class="status-badge dirty2" id="sb-dirty" onclick="toggleStatus('dirty')">Needs cleaning</span>`:''}
+      <span class="status-badge" id="sb-cash" onclick="toggleStatus('cash')" style="background:#fef3c7;color:#92400e;border-color:transparent;">Cash Payment</span>
     </div>
   </div>
   <div class="form-row">
@@ -2229,7 +2242,7 @@ function openAddModal(dateStr,room,ovf){
     <button class="btn-primary" id="save-btn" onclick="saveBooking('${dateStr||''}','${room||''}',${isOvf})">Save Booking</button>
   </div></div></div>`;
   document.getElementById('modal-container').innerHTML=html;
-  window._paid=false;window._dirty=false;window._owedPaid=true;window._editingVoucher=null;
+  window._paid=false;window._dirty=false;window._cash=false;window._owedPaid=true;window._editingVoucher=null;
   window._pdfFiles={invoice:null,voucher:null,aroma:null};
   window._clearInvoicePdf=false;window._clearVoucherPdf=false;window._clearAromaPdf=false;
   window._existingInvoicePdfUrl=null;window._existingVoucherPdfUrl=null;window._existingAromaPdfUrl=null;
@@ -2238,8 +2251,15 @@ function openAddModal(dateStr,room,ovf){
 function toggleStatus(t){
   if(t==='paid'){window._paid=true;document.getElementById('sb-paid').classList.add('active');document.getElementById('sb-unpaid').classList.remove('active');}
   else if(t==='unpaid'){window._paid=false;document.getElementById('sb-unpaid').classList.add('active');document.getElementById('sb-paid').classList.remove('active');}
-  else if(t==='clean'){window._dirty=false;document.getElementById('sb-clean').classList.add('active');document.getElementById('sb-dirty').classList.remove('active');}
-  else if(t==='dirty'){window._dirty=true;document.getElementById('sb-dirty').classList.add('active');document.getElementById('sb-clean').classList.remove('active');}
+  else if(t==='cash'){
+    window._cash=!window._cash;
+    const btn=document.getElementById('sb-cash');
+    if(btn){
+      btn.classList.toggle('active',window._cash);
+      btn.style.borderColor=window._cash?'#d97706':'transparent';
+      btn.style.fontWeight=window._cash?'700':'500';
+    }
+  }
 }
 function toggleOwed(t){
   if(t==='paid'){window._owedPaid=true;document.getElementById('sb-owed-paid').classList.add('active');document.getElementById('sb-owed').classList.remove('active');}
@@ -2372,7 +2392,7 @@ async function saveBooking(defDate,defRoom,isOvf){
     meal_breakfast:parseFloat(document.getElementById('f-meal-breakfast').value)||null,
     meal_lunch:parseFloat(document.getElementById('f-meal-lunch').value)||null,
     meal_dinner:parseFloat(document.getElementById('f-meal-dinner').value)||null,
-    paid:window._paid!==false,dirty:!ovf&&!!window._dirty,
+    paid:window._paid!==false,dirty:false,cash_payment:!!window._cash,
     checkin:checkin||null,checkout:checkout||null,
     overflow:ovf,room,
     guesthouse:ovf?(uc(document.getElementById('f-guesthouse').value.trim())||null):null,
@@ -2414,6 +2434,22 @@ async function saveBooking(defDate,defRoom,isOvf){
   const ok=await saveBookingToDB(records);
   if(ok){
     window._editingVoucher=null;
+    // If marked as cash payment, add to cashbook as a credit
+    if(window._cash){
+      const nights=checkout?(Math.round((new Date(checkout)-new Date(checkin))/(1000*60*60*24))||1):1;
+      const company=uc((document.getElementById('f-company')||{}).value.trim())||'';
+      const comp=companies.find(c=>c.name===company);
+      const rate=comp&&comp.daily_rate?parseFloat(comp.daily_rate):0;
+      if(rate>0){
+        const total=rate*nights;
+        await sb.from('cashbook_funds').insert({
+          fund_date:checkin,
+          amount:total,
+          notes:`Cash — ${uc(name)}${invoice?' ('+invoice+')':''}`,
+          booking_name:uc(name),
+        });
+      }
+    }
     showToast('Booking saved!');
     closeModal();
     await loadAndRender();
@@ -2778,7 +2814,7 @@ function editBooking(dateStr,room){
     document.getElementById('f-checkin').value=b.checkin||dateStr;
     document.getElementById('f-checkout').value=b.checkout||'';
     document.getElementById('f-room').value=room;
-    window._paid=b.paid!==false;window._dirty=!!b.dirty;
+    window._paid=b.paid!==false;window._dirty=false;window._cash=!!b.cash_payment;
     window._editingVoucher=b.voucher||null;
     window._pdfFiles={invoice:null,voucher:null,aroma:null};
     window._clearInvoicePdf=false;window._clearVoucherPdf=false;
@@ -2808,6 +2844,7 @@ function editBooking(dateStr,room){
       if(removeBtn)removeBtn.style.display='flex';
     }
     if(!window._paid){document.getElementById('sb-unpaid').classList.add('active');document.getElementById('sb-paid').classList.remove('active');}
+    if(window._cash){const btn=document.getElementById('sb-cash');if(btn){btn.classList.add('active');btn.style.borderColor='#d97706';btn.style.fontWeight='700';}}
     if(!ovf&&window._dirty){document.getElementById('sb-dirty').classList.add('active');document.getElementById('sb-clean').classList.remove('active');}
     if(ovf){
       document.getElementById('f-guesthouse').value=uc(b.guesthouse)||'';
@@ -2876,6 +2913,8 @@ function acSelect(id){
   document.getElementById('f-company').value=c.name;
   const list=document.getElementById('ac-list');
   if(list)list.style.display='none';
+  // Show combined rate
+  setTimeout(()=>showCombinedRate(),50);
   // Auto-fill meal allowances from company defaults
   if(c.meal_breakfast||c.meal_lunch||c.meal_dinner){
     const b=document.getElementById('f-meal-breakfast');
@@ -3016,6 +3055,34 @@ function acAgencySelect(id){
   document.getElementById('f-agency').value=a.name;
   const list=document.getElementById('ac-agency-list');
   if(list)list.style.display='none';
+  // Show combined rate if company also has a daily rate
+  showCombinedRate();
+}
+
+function showCombinedRate(){
+  const companyName=(document.getElementById('f-company')||{}).value||'';
+  const agencyName=(document.getElementById('f-agency')||{}).value||'';
+  const company=companies.find(c=>c.name===companyName);
+  const agency=agencies.find(a=>a.name===agencyName);
+  const companyRate=company&&company.daily_rate?parseFloat(company.daily_rate):0;
+  const agencyComm=agency&&agency.commission?parseFloat(agency.commission):0;
+  // Remove existing rate hint
+  const existing=document.getElementById('combined-rate-hint');
+  if(existing)existing.remove();
+  if(companyRate>0||agencyComm>0){
+    const total=companyRate+agencyComm;
+    const hint=document.createElement('div');
+    hint.id='combined-rate-hint';
+    hint.style.cssText='font-size:12px;color:var(--accent);background:var(--accent-light);border:1px solid var(--accent);border-radius:6px;padding:6px 10px;display:flex;justify-content:space-between;align-items:center;margin-top:4px;';
+    hint.innerHTML=`<span style="color:var(--muted);">
+      ${companyRate>0?`<span style="color:var(--text)">Rate R ${companyRate.toFixed(2)}</span>`:''}
+      ${agencyComm>0?` + Commission R ${agencyComm.toFixed(2)}`:''}
+    </span>
+    <strong style="color:var(--accent);font-size:13px;">Total R ${total.toFixed(2)}/night</strong>`;
+    // Insert after the agency field
+    const agencyWrap=document.getElementById('f-agency');
+    if(agencyWrap&&agencyWrap.parentElement)agencyWrap.parentElement.appendChild(hint);
+  }
 }
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
@@ -3062,6 +3129,7 @@ async function renderCompanies(){
           ${c.email?`<div class="company-card-detail"><i class="ti ti-mail"></i>${c.email}</div>`:''}
           ${c.address?`<div class="company-card-detail"><i class="ti ti-map-pin"></i>${c.address}</div>`:''}
           ${c.vat_number?`<div class="company-card-detail"><i class="ti ti-receipt-tax"></i>VAT: ${c.vat_number}</div>`:''}
+          ${c.daily_rate?`<div class="company-card-detail" style="color:var(--accent);font-weight:600;"><i class="ti ti-home"></i>R ${parseFloat(c.daily_rate).toFixed(2)}/night</div>`:''}
           ${(c.meal_breakfast||c.meal_lunch||c.meal_dinner)?`<div class="company-card-detail" style="color:var(--accent);font-weight:500;"><i class="ti ti-tools-kitchen-2"></i>Meals: ${[c.meal_breakfast?'B R'+c.meal_breakfast:'',c.meal_lunch?'L R'+c.meal_lunch:'',c.meal_dinner?'D R'+c.meal_dinner:''].filter(Boolean).join(' · ')}</div>`:''}
         </div>
       </div>
@@ -3100,7 +3168,9 @@ async function renderAgencies(){
           ${a.phone?`<div class="company-card-detail"><i class="ti ti-phone"></i>${a.phone}</div>`:''}
           ${a.email?`<div class="company-card-detail"><i class="ti ti-mail"></i>${a.email}</div>`:''}
           ${a.address?`<div class="company-card-detail"><i class="ti ti-map-pin"></i>${a.address}</div>`:''}
-          ${a.vat_number?`<div class="company-card-detail"><i class="ti ti-receipt-tax"></i>VAT: ${a.vat_number}</div>`:''}        </div>
+          ${a.vat_number?`<div class="company-card-detail"><i class="ti ti-receipt-tax"></i>VAT: ${a.vat_number}</div>`:''}
+          ${a.commission?`<div class="company-card-detail" style="color:var(--accent);font-weight:600;"><i class="ti ti-coin"></i>Commission: R ${parseFloat(a.commission).toFixed(2)}/night</div>`:''}
+        </div>
       </div>
       ${linkedCompanies.length?`<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Books for: ${linkedCompanies.map(c=>`<strong style="color:var(--text)">${c.name}</strong>`).join(', ')}</div>`:'<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Not linked to any company yet</div>'}
       <div class="company-card-actions">
@@ -3136,6 +3206,13 @@ function openAgencyModal(prefillName='',editId=''){
           <input class="form-input" id="fa-address" placeholder="123 Main Street, Johannesburg" value="${a&&a.address?a.address:''}" /></div>
         <div class="form-group full"><label class="form-label">VAT Number</label>
           <input class="form-input" id="fa-vat" placeholder="4123456789" value="${a&&a.vat_number?a.vat_number:''}" /></div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="ti ti-coin" style="font-size:13px"></i> Commission</div>
+          <div class="form-group full"><label class="form-label">Commission per Night (R)</label>
+            <input class="form-input" id="fa-commission" type="number" placeholder="0.00" value="${a&&a.commission?a.commission:''}" />
+            <div style="font-size:11px;color:var(--muted);margin-top:3px;">Added on top of the company daily rate when this agency books</div>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeModal()">Cancel</button>
@@ -3159,6 +3236,7 @@ async function saveAgency(editId){
     email:document.getElementById('fa-email').value.trim()||null,
     address:uc(document.getElementById('fa-address').value.trim())||null,
     vat_number:uc(document.getElementById('fa-vat').value.trim())||null,
+    commission:parseFloat(document.getElementById('fa-commission').value)||null,
   };
   let error;
   if(editId){({error}=await sb.from('agencies').update(payload).eq('id',editId));}
@@ -3228,6 +3306,11 @@ function openCompanyModal(prefillName='',editId=''){
           <input class="form-input" id="fc-address" placeholder="123 Main Street, Johannesburg" value="${c&&c.address?c.address:''}" /></div>
         <div class="form-group full"><label class="form-label">VAT Number</label>
           <input class="form-input" id="fc-vat" placeholder="4123456789" value="${c&&c.vat_number?c.vat_number:''}" /></div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="ti ti-home" style="font-size:13px"></i> Accommodation Rate</div>
+          <div class="form-group full"><label class="form-label">Daily Rate (R per night)</label>
+            <input class="form-input" id="fc-daily-rate" type="number" placeholder="0.00" value="${c&&c.daily_rate?c.daily_rate:''}" /></div>
+        </div>
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
           <div style="font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="ti ti-tools-kitchen-2" style="font-size:13px"></i> Default Meal Allowances (R per day)</div>
           <div class="form-row">
@@ -3307,6 +3390,7 @@ async function saveCompany(editId){
     email:document.getElementById('fc-email').value.trim()||null,
     address:uc(document.getElementById('fc-address').value.trim())||null,
     vat_number:uc(document.getElementById('fc-vat').value.trim())||null,
+    daily_rate:parseFloat(document.getElementById('fc-daily-rate').value)||null,
     meal_breakfast:parseFloat(document.getElementById('fc-meal-breakfast').value)||null,
     meal_lunch:parseFloat(document.getElementById('fc-meal-lunch').value)||null,
     meal_dinner:parseFloat(document.getElementById('fc-meal-dinner').value)||null,
