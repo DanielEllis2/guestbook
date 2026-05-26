@@ -1985,7 +1985,7 @@ async function toggleGroupOwedPaidDB(dateStr, room){
 function showBookingConflictError(room, clash){
   const initials=clash.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   document.getElementById('modal-container').innerHTML=`
-    <div class="modal-backdrop" style="background:rgba(0,0,0,.65);" onclick="if(event.target===this)closeModal()">
+    <div class="modal-backdrop" style="background:rgba(0,0,0,.65);" >
       <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;box-shadow:0 32px 80px rgba(0,0,0,.4);overflow:hidden;">
         <div style="background:#dc2626;padding:20px 22px;display:flex;align-items:center;gap:14px;">
           <i class="ti ti-alert-triangle" style="font-size:28px;color:#fff;flex-shrink:0;"></i>
@@ -2281,7 +2281,7 @@ function openGroupCheckinModal(dateStr, room){
     </div>`).join('');
 
   document.getElementById('modal-container').innerHTML=`
-    <div class="modal-backdrop" onclick="if(event.target===this)closeModal()">
+    <div class="modal-backdrop" >
       <div class="modal" style="max-width:440px;">
         <div class="modal-header${allIn?' ':' '}" style="${allIn?'background:var(--accent-light);border-bottom-color:var(--accent);':''}">
           <div>
@@ -2349,7 +2349,7 @@ function openEditGroupModal(dateStr, room){
     </div>`).join('');
 
   document.getElementById('modal-container').innerHTML=`
-    <div class="modal-backdrop" onclick="if(event.target===this)closeModal()">
+    <div class="modal-backdrop" >
       <div class="modal" style="max-width:500px;">
         <div class="modal-header overflow-header">
           <div>
@@ -5461,7 +5461,7 @@ function updateCashbookSummary(totalIn,totalOut,balance=0){
 function openAddFundsModal(){
   const today=dateKey(new Date());
   document.getElementById('modal-container').innerHTML=`
-    <div class="modal-backdrop" onclick="if(event.target===this)closeModal()">
+    <div class="modal-backdrop" >
       <div class="modal" style="max-width:400px;">
         <div class="modal-header">
           <div><div class="modal-title" style="display:flex;align-items:center;gap:8px;"><i class="ti ti-plus" style="color:var(--accent)"></i> Add Funds to Cashbook</div>
