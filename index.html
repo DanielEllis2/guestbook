@@ -969,7 +969,7 @@ async function deleteBookingFromDB(ids){
 // ── NAVIGATION ────────────────────────────────────────────
 function setView(v){
   currentView=v;
-  ['week','month','clients','companies','agencies','guesthouses','remittances'].forEach(k=>{
+  ['week','month','clients','companies','agencies','guesthouses','remittances','cashbook'].forEach(k=>{
     ['','2','3','4','5'].forEach(s=>{
       const el=document.getElementById(`btn-${k}${s}`);
       if(el)el.classList.toggle('active',v===k);
@@ -980,8 +980,8 @@ function setView(v){
   document.getElementById('agencies-page').classList.toggle('active',v==='agencies');
   document.getElementById('clients-page').classList.toggle('active',v==='clients');
   document.getElementById('guesthouses-page').classList.toggle('active',v==='guesthouses');
-  document.getElementById('remittances-page').classList.toggle('active',v==='remittances');
-  document.getElementById('cashbook-page').classList.toggle('active',v==='cashbook');
+  const remPage=document.getElementById('remittances-page');if(remPage)remPage.classList.toggle('active',v==='remittances');
+  const cbPage=document.getElementById('cashbook-page');if(cbPage)cbPage.classList.toggle('active',v==='cashbook');
   if(v==='companies')renderCompanies();
   else if(v==='agencies')renderAgencies();
   else if(v==='clients')renderClients();
@@ -4636,55 +4636,69 @@ function calcMealTotal(){
 }
 
 // ── CASHBOOK ──────────────────────────────────────────────
-async function renderCashbook(){
-  const page=document.getElementById('cashbook-page');
-  if(!page)return;
-  const body=document.getElementById('cashbook-body');
-  if(body)body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td></tr>`;
 
-  // Get current month from the period selector
+function populateCashbookTable(entries){
+  const body=document.getElementById('cashbook-body');
+  if(!body)return;
+  if(!entries.length){
+    body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">No meal allowances found for this period</td></tr>`;
+    const tot=document.getElementById('cashbook-monthly-total');if(tot)tot.textContent='R 0.00';
+    return;
+  }
+  let total=0;
+  let html='';
+  entries.forEach(b=>{
+    const daily=(parseFloat(b.meal_breakfast)||0)+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0);
+    const nights=b.checkin&&b.checkout?Math.round((new Date(b.checkout)-new Date(b.checkin))/(1000*60*60*24)):1;
+    const rowTotal=daily*Math.max(nights,1);
+    total+=rowTotal;
+    const d=parseDate(b.checkin);
+    const dateStr=`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+    html+=`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:10px 14px;font-size:13px;color:var(--muted);white-space:nowrap;">${dateStr}</td>
+      <td style="padding:10px 14px;font-size:13px;font-family:var(--mono);color:var(--accent);font-weight:500;">${b.invoice||'—'}</td>
+      <td style="padding:10px 14px;font-size:13px;font-weight:600;color:var(--text);">${b.name}</td>
+      <td style="padding:10px 14px;font-size:13px;color:var(--muted);">${nights} night${nights!==1?'s':''}</td>
+      <td style="padding:10px 14px;font-size:14px;font-weight:700;color:var(--text);text-align:right;">R ${rowTotal.toFixed(2)}</td>
+    </tr>`;
+  });
+  body.innerHTML=html;
+  const tot=document.getElementById('cashbook-monthly-total');
+  if(tot)tot.textContent=`R ${total.toFixed(2)}`;
+}
+async function renderCashbook(){
+  console.log('renderCashbook called');
+  const body=document.getElementById('cashbook-body');
+  if(!body){console.log('cashbook-body element NOT FOUND');return;}
+  body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td></tr>`;
+
   const year=currentDate.getFullYear();
   const month=currentDate.getMonth();
   const monthStart=dateKey(new Date(year,month,1));
   const monthEnd=dateKey(new Date(year,month+1,0));
 
-  // Update month label
   const lbl=document.getElementById('cashbook-month-label');
   if(lbl)lbl.textContent=`${MONTHS[month]} ${year}`;
 
-  // Fetch bookings with meals in this month
+  // Single query — fetch ALL bookings in month, filter client-side for any meal
   const {data,error}=await sb.from('bookings')
     .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,room')
     .gte('checkin',monthStart)
     .lte('checkin',monthEnd)
-    .not('meal_breakfast','is',null)
     .order('checkin',{ascending:true});
 
-  // Also fetch bookings with lunch or dinner (since we filter by any meal)
-  const {data:data2}=await sb.from('bookings')
-    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,room')
-    .gte('checkin',monthStart)
-    .lte('checkin',monthEnd)
-    .not('meal_lunch','is',null)
-    .order('checkin',{ascending:true});
+  if(error){
+    if(body)body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:#dc2626;">Error: ${error.message}</td></tr>`;
+    return;
+  }
 
-  const {data:data3}=await sb.from('bookings')
-    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,room')
-    .gte('checkin',monthStart)
-    .lte('checkin',monthEnd)
-    .not('meal_dinner','is',null)
-    .order('checkin',{ascending:true});
-
-  // Merge and deduplicate by id, only first record per booking (checkin date)
-  const allData=[...(data||[]),...(data2||[]),...(data3||[])];
+  // Filter to only bookings that have at least one meal amount, deduplicate by name+checkin
   const seen=new Set();
   const unique=[];
-  allData.forEach(b=>{
-    // Use name+checkin as unique key (one line per booking stay)
+  (data||[]).forEach(b=>{
     const key=`${b.name}__${b.checkin}`;
-    if(!seen.has(key)&&(b.meal_breakfast||b.meal_lunch||b.meal_dinner)){
-      seen.add(key);unique.push(b);
-    }
+    const hasMeal=(parseFloat(b.meal_breakfast)||0)+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0)>0;
+    if(!seen.has(key)&&hasMeal){seen.add(key);unique.push(b);}
   });
   unique.sort((a,b)=>a.checkin.localeCompare(b.checkin));
 
@@ -4699,6 +4713,50 @@ async function renderCashbook(){
   const totalLbl=document.getElementById('cashbook-total-label');
   if(totalLbl)totalLbl.textContent='Monthly Total';
   populateCashbookTable(unique);
+}
+
+// ── CASHBOOK HELPERS ──────────────────────────────────────
+function cashbookNavigate(dir){currentDate.setMonth(currentDate.getMonth()+dir);renderCashbook();}
+
+function clearCashbookDates(){
+  const f=document.getElementById('cb-date-from');const t=document.getElementById('cb-date-to');
+  if(f)f.value='';if(t)t.value='';
+  const lbl=document.getElementById('cashbook-total-label');if(lbl)lbl.textContent='Monthly Total';
+  renderCashbook();
+}
+
+async function renderCashbookCustom(){
+  const from=(document.getElementById('cb-date-from')||{}).value;
+  const to=(document.getElementById('cb-date-to')||{}).value;
+  if(from&&to)await renderCashbookRange(from,to);
+}
+
+async function renderCashbookRange(fromDate,toDate){
+  const body=document.getElementById('cashbook-body');
+  if(body)body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td></tr>`;
+  const lbl=document.getElementById('cashbook-month-label');
+  if(lbl){const f=parseDate(fromDate);const t=parseDate(toDate);lbl.textContent=`${f.getDate()} ${MONTHS[f.getMonth()].slice(0,3)} — ${t.getDate()} ${MONTHS[t.getMonth()].slice(0,3)} ${t.getFullYear()}`;}
+  const lbl2=document.getElementById('cashbook-total-label');if(lbl2)lbl2.textContent='Period Total';
+  const {data,error}=await sb.from('bookings').select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,room').gte('checkin',fromDate).lte('checkin',toDate).order('checkin',{ascending:true});
+  if(error){if(body)body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:#dc2626;">Error: ${error.message}</td></tr>`;return;}
+  const seen=new Set();const unique=[];
+  (data||[]).forEach(b=>{const key=`${b.name}__${b.checkin}`;const hasMeal=(parseFloat(b.meal_breakfast)||0)+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0)>0;if(!seen.has(key)&&hasMeal){seen.add(key);unique.push(b);}});
+  unique.sort((a,b)=>a.checkin.localeCompare(b.checkin));
+  populateCashbookTable(unique);
+}
+
+function printCashbook(){
+  const periodLabel=(document.getElementById('cashbook-month-label')||{}).textContent||'';
+  const totalLabel=(document.getElementById('cashbook-total-label')||{}).textContent||'Total';
+  const totalVal=(document.getElementById('cashbook-monthly-total')||{}).textContent||'R 0.00';
+  let rowsHtml='';
+  [...document.querySelectorAll('#cashbook-body tr')].forEach(row=>{
+    const cells=[...row.querySelectorAll('td')];
+    if(cells.length===5)rowsHtml+=`<tr><td>${cells[0].textContent}</td><td>${cells[1].textContent}</td><td>${cells[2].textContent}</td><td>${cells[3].textContent}</td><td style="text-align:right;font-weight:700;">${cells[4].textContent}</td></tr>`;
+  });
+  const win=window.open('','_blank','width=900,height=700');
+  win.document.write(`<!DOCTYPE html><html><head><title>Meal Cashbook — ${periodLabel}</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1a1714;padding:32px;}.hdr{display:flex;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #2d5a3d;}.logo{font-size:20px;font-weight:700;color:#2d5a3d;}.meta{text-align:right;font-size:12px;color:#7a746b;}table{width:100%;border-collapse:collapse;}thead tr{background:#f0ede6;border-bottom:2px solid #2d5a3d;}th{padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:#7a746b;text-transform:uppercase;}th:last-child{text-align:right;}tbody tr{border-bottom:1px solid #e2ddd4;}tbody tr:nth-child(even){background:#fafaf8;}td{padding:9px 12px;}tfoot tr{background:#f0ede6;border-top:2px solid #2d5a3d;}tfoot td{padding:10px 12px;font-size:14px;font-weight:700;}tfoot td:last-child{text-align:right;font-size:16px;font-weight:800;color:#2d5a3d;}.footer{margin-top:24px;font-size:11px;color:#7a746b;text-align:center;border-top:1px solid #e2ddd4;padding-top:10px;}</style></head><body><div class="hdr"><div><div class="logo">Aroma Guesthouse · Meal Cashbook</div><div style="font-size:12px;color:#7a746b;margin-top:4px;">054 332 5448 · info@aromastay.co.za</div></div><div class="meta"><strong>${periodLabel}</strong>Printed: ${new Date().toLocaleDateString('en-ZA',{day:'2-digit',month:'long',year:'numeric'})}</div></div><table><thead><tr><th>Date</th><th>Invoice #</th><th>Guest Name</th><th>Nights</th><th style="text-align:right;">Total Meals</th></tr></thead><tbody>${rowsHtml}</tbody><tfoot><tr><td colspan="4">${totalLabel}</td><td>${totalVal}</td></tr></tfoot></table><div class="footer">Aroma Guesthouse · 58 Borcherd Street, Upington · bookings.aromastay.co.za</div></body></html>`);
+  win.document.close();win.focus();setTimeout(()=>win.print(),400);
 }
 </script>
 
