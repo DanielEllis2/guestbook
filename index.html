@@ -3977,6 +3977,19 @@ function handlePdfSelect(type,input){
   if(nameEl)nameEl.textContent=file.name;
   if(box)box.classList.add('has-file');
   if(removeBtn)removeBtn.style.display='flex';
+  // Auto-fill invoice number from filename if type is invoice
+  if(type==='invoice'){
+    const invoiceField=document.getElementById('f-invoice');
+    if(invoiceField&&!invoiceField.value.trim()){
+      // Strip extension, then extract number after IN prefix (case insensitive)
+      const baseName=file.name.replace(/\.pdf$/i,'').replace(/[_\-\s]/g,'');
+      const match=baseName.match(/IN(\d+)/i);
+      if(match){
+        invoiceField.value=match[1];
+        showToast(`Invoice number ${match[1]} extracted from filename`);
+      }
+    }
+  }
   // Show Read Voucher button when a voucher PDF is selected
   if(type==='voucher'){
     const row=document.getElementById('read-voucher-row');
