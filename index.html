@@ -935,7 +935,7 @@ async function saveBookingToDB(records){
     return true;
   }
   // Upsert all records (insert or update based on room+date unique)
-  const {error}=await sb.from('bookings').upsert(records,{onConflict:'room,booking_date'});
+  const {error}=await sb.from('bookings').upsert(records,{onConflict:'room,booking_date,name'});
   if(error){showToast('Error saving: '+error.message,'error');return false;}
   // Keep cache fresh
   for(const r of records){
@@ -4399,7 +4399,7 @@ async function syncOfflineQueue(){
       if(item.type==='upsert'){
         // Remove cache_key field before upserting to Supabase
         const clean=item.records.map(({cache_key,...r})=>r);
-        const {error}=await sb.from('bookings').upsert(clean,{onConflict:'room,booking_date'});
+        const {error}=await sb.from('bookings').upsert(clean,{onConflict:'room,booking_date,name'});
         if(error)throw error;
       } else if(item.type==='delete'){
         const {error}=await sb.from('bookings').delete().in('id',item.ids);
