@@ -2740,7 +2740,8 @@ function editBooking(dateStr,room){
       window._existingVoucherPdfUrl=(!window._pdfFiles.voucher&&!window._clearVoucherPdf)?b.voucher_pdf_url||null:null;
       window._existingAromaPdfUrl=(!window._pdfFiles.aroma&&!window._clearAromaPdf)?b.aroma_pdf_url||null:null;
       // Delete old records first then save new
-      const bOld=bookings[`${dateStr}__${room}`];
+      // Use getBooking() since bookings is now an array per key
+      const bOld=getBooking(dateStr,room);
       if(bOld){
         const{data}=await sb.from('bookings').select('id').eq('room',room).eq('name',bOld.name).gte('booking_date',bOld.checkin||dateStr).lte('booking_date',bOld.checkout||dateStr);
         await deleteBookingFromDB((data||[]).map(r=>r.id));
