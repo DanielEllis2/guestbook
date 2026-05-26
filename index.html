@@ -4789,7 +4789,12 @@ function openAddFundsModal(){
           <div class="form-group full"><label class="form-label">Date *</label>
             <input class="form-input" id="fund-date" type="date" value="${today}" /></div>
           <div class="form-group full"><label class="form-label">Amount (R) *</label>
-            <input class="form-input" id="fund-amount" type="number" placeholder="0.00" style="font-size:18px;font-weight:600;" /></div>
+            <div style="display:flex;gap:6px;margin-bottom:6px;">
+              <button onclick="document.getElementById('fund-amount').value=3000;document.getElementById('fund-amount').focus();" style="flex:1;padding:7px;background:var(--accent-light);border:1.5px solid var(--accent);border-radius:7px;font-family:var(--font);font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">R 3,000</button>
+              <button onclick="document.getElementById('fund-amount').value=9000;document.getElementById('fund-amount').focus();" style="flex:1;padding:7px;background:var(--accent-light);border:1.5px solid var(--accent);border-radius:7px;font-family:var(--font);font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">R 9,000</button>
+              <button onclick="document.getElementById('fund-amount').value=18000;document.getElementById('fund-amount').focus();" style="flex:1;padding:7px;background:var(--accent-light);border:1.5px solid var(--accent);border-radius:7px;font-family:var(--font);font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">R 18,000</button>
+            </div>
+            <input class="form-input" id="fund-amount" type="number" placeholder="or type custom amount..." style="font-size:18px;font-weight:600;" /></div>
           <div class="form-group full"><label class="form-label">Notes</label>
             <input class="form-input" id="fund-notes" placeholder="e.g. Cash deposited from bank" /></div>
         </div>
