@@ -149,7 +149,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .date-label .dl-day{font-size:15px;font-weight:700;color:var(--text);}
 .date-label .dl-date{font-size:12px;color:var(--muted);margin-top:2px;}
 .date-label.today .dl-day,.date-label.today .dl-date{color:var(--accent);}
-.cell{background:var(--surface);border:1px solid var(--border);border-radius:6px;min-height:100px;width:160px;cursor:pointer;transition:border .12s;vertical-align:top;}
+.cell{background:var(--surface);border:1px solid var(--border);border-radius:6px;min-height:100px;width:160px;max-width:160px;cursor:pointer;transition:border .12s;vertical-align:top;overflow:hidden;}
 .cell:hover{border-color:var(--accent);}
 .cell.occupied{background:var(--occupied-bg);border-color:var(--accent);}
 .cell.dirty{background:var(--dirty);border-color:#d4a017;}
@@ -159,7 +159,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .cell.overflow-cell{background:var(--overflow-bg);border-color:var(--overflow-border);}
 .cell.overflow-cell:hover{border-color:var(--overflow-text);}
 .cell.overflow-cell.unpaid{background:linear-gradient(135deg,var(--overflow-bg) 60%,var(--unpaid) 100%);}
-.cell-content{padding:8px 10px;display:flex;flex-direction:column;gap:2px;}
+.cell-content{padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden;}
 .cell-name{font-size:13px;font-weight:600;color:var(--occupied-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .cell.overflow-cell .cell-name{color:var(--overflow-text);}
 .cell-company{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
