@@ -2342,8 +2342,9 @@ function openEditGroupModal(dateStr, room){
   const b=bArr[0];
 
   const memberRows=bArr.map((person,i)=>`
-    <div class="group-name-row" data-id="${person.id}" style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;">
+    <div class="group-name-row" data-id="${person.id}" style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;">
       <input type="text" class="group-edit-name-input form-input" value="${person.name}" placeholder="First & Last Name" style="font-size:13px;" />
+      <input type="checkbox" class="group-edit-breakfast-tick" title="Ate breakfast physically" ${person.breakfast_eaten?'checked':''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" />
       <button class="group-name-remove" onclick="markGroupPersonDeleted(this)" title="Remove person" style="${person.checked_in?'opacity:.4;cursor:not-allowed;':''}" ${person.checked_in?'disabled title="Cannot remove — already checked in"':''}>✕</button>
     </div>`).join('');
 
@@ -2358,10 +2359,10 @@ function openEditGroupModal(dateStr, room){
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
-            <span>Group Members</span>
-            <span style="font-size:11px;font-weight:400;">Checked-in members cannot be removed</span>
+          <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;padding:0 0 4px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">
+            <span>Name</span><span style="text-align:center;white-space:nowrap;">Ate B/fast</span><span></span>
           </div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Checked-in members cannot be removed</div>
           <div id="edit-group-list" style="display:flex;flex-direction:column;gap:6px;">${memberRows}</div>
           <button onclick="addEditGroupRow()" style="width:100%;margin-top:8px;padding:8px;background:var(--overflow-bg);border:1px dashed var(--overflow-border);border-radius:7px;font-family:var(--font);font-size:12px;font-weight:600;color:var(--overflow-text);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;"><i class="ti ti-plus"></i> Add Person</button>
         </div>
@@ -2400,8 +2401,8 @@ function addEditGroupRow(){
   const row=document.createElement('div');
   row.className='group-name-row';
   row.dataset.id='new';
-  row.style.cssText='display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;';
-  row.innerHTML=`<input type="text" class="group-edit-name-input form-input" placeholder="New Person — First & Last Name" style="font-size:13px;" /><button class="group-name-remove" onclick="this.closest('.group-name-row').remove()" title="Remove">✕</button>`;
+  row.style.cssText='display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;';
+  row.innerHTML=`<input type="text" class="group-edit-name-input form-input" placeholder="New Person — First & Last Name" style="font-size:13px;" /><input type="checkbox" class="group-edit-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" /><button class="group-name-remove" onclick="this.closest('.group-name-row').remove()" title="Remove">✕</button>`;
   list.appendChild(row);
   row.querySelector('input').focus();
 }
@@ -2436,11 +2437,15 @@ async function saveEditedGroup(dateStr, room){
     if(row.dataset.id==='new')continue;
     const person=bArr.find(x=>x.id===row.dataset.id);
     if(!person)continue;
-    const newName=row.querySelector('input').value.trim().toUpperCase();
-    if(newName&&newName!==person.name){
+    const newName=row.querySelector('.group-edit-name-input').value.trim().toUpperCase();
+    const newBreakfastEaten=!!(row.querySelector('.group-edit-breakfast-tick')&&row.querySelector('.group-edit-breakfast-tick').checked);
+    const updates={};
+    if(newName&&newName!==person.name)updates.name=newName;
+    if(newBreakfastEaten!==!!person.breakfast_eaten)updates.breakfast_eaten=newBreakfastEaten;
+    if(Object.keys(updates).length){
       const {data}=await sb.from('bookings').select('id').eq('room',room).eq('name',person.name)
         .gte('booking_date',person.checkin||dateStr).lte('booking_date',person.checkout||dateStr);
-      await sb.from('bookings').update({name:newName}).in('id',(data||[]).map(r=>r.id));
+      await sb.from('bookings').update(updates).in('id',(data||[]).map(r=>r.id));
     }
   }
 
@@ -2461,7 +2466,7 @@ async function saveEditedGroup(dateStr, room){
           checkin:b.checkin,checkout:b.checkout,overflow:true,room,
           guesthouse:b.guesthouse,gh_cost:b.gh_cost,owed_paid:b.owed_paid,
           meal_breakfast:b.meal_breakfast,meal_lunch:b.meal_lunch,meal_dinner:b.meal_dinner,
-          breakfast_eaten:false,checked_in:false,
+          breakfast_eaten:!!(row.querySelector('.group-edit-breakfast-tick')&&row.querySelector('.group-edit-breakfast-tick').checked),checked_in:false,
           booking_date:dateKey(new Date(cur)),
         });
         cur.setDate(cur.getDate()+1);
