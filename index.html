@@ -167,6 +167,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .cell-add{display:flex;align-items:center;justify-content:center;height:100px;color:var(--border);font-size:26px;transition:color .12s;}
 .cell:hover .cell-add{color:var(--accent);}
 .cell.overflow-empty .cell-add{color:#c4b5fd;}
+.cell.checked-in{border-left:3px solid var(--accent);}
+.checkin-tick{position:absolute;top:5px;right:6px;width:20px;height:20px;border-radius:5px;border:1.5px solid var(--border);background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all .12s;z-index:2;flex-shrink:0;}
+.checkin-tick.ticked{background:var(--accent);border-color:var(--accent);color:#fff;}
+.checkin-tick:hover{border-color:var(--accent);}
 .cell.overflow-empty:hover .cell-add{color:var(--overflow-border);}
 .month-room-head{padding:5px 4px;font-size:11px;font-weight:500;color:var(--muted);font-family:var(--mono);text-align:center;white-space:nowrap;min-width:44px;background:var(--bg);position:sticky;top:0;z-index:2;}
 .month-room-head.corner{position:sticky;left:0;top:0;z-index:4;background:var(--bg);}
@@ -1234,17 +1238,23 @@ function renderWeek(){
           </div></td>`;
         } else {
           const singleTip=`${cellTip} | ${b.name}${b.company?' | '+b.company:''}${b.agency?' | '+b.agency:''}${ovf&&b.guesthouse?' @ '+b.guesthouse:''}`;
-          html+=`<td class="${cls}" onclick="openDetailModal('${dStr}','${room}')" title="${singleTip}"><div class="cell-content">
-            <div class="cell-name">${hl(b.name)}</div>
-            <div class="cell-company">${b.company||'—'}</div>
-            <div class="cell-company">${ovf&&b.guesthouse?`<i class="ti ti-building" style="font-size:10px"></i> ${b.guesthouse}`:b.agency||'—'}</div>
-            <div class="cell-company" style="font-family:var(--mono);font-size:10px;color:var(--accent);font-weight:500;">${b.invoice||'—'}</div>
-            <div class="cell-tags">
-              ${(!b.paid)?'<span class="tag tag-unpaid">Unpaid</span>':''}
-              ${!ovf&&b.dirty?'<span class="tag tag-dirty">Dirty</span>':''}
-              ${ovf&&b.owed_paid===false?'<span class="tag tag-owed">Owe GH</span>':''}
+          const isCheckedIn=!!b.checked_in;
+          if(isCheckedIn)cls+=' checked-in';
+          html+=`<td class="${cls}" style="position:relative;" onclick="openDetailModal('${dStr}','${room}')" title="${singleTip}">
+            <div class="checkin-tick${isCheckedIn?' ticked':''}" onclick="event.stopPropagation();toggleCheckedIn('${b.id}','${dStr}','${room}')" title="${isCheckedIn?'Checked in — click to undo':'Mark as checked in'}">${isCheckedIn?'✓':''}</div>
+            <div class="cell-content">
+              <div class="cell-name">${hl(b.name)}</div>
+              <div class="cell-company">${b.company||'—'}</div>
+              <div class="cell-company">${ovf&&b.guesthouse?`<i class="ti ti-building" style="font-size:10px"></i> ${b.guesthouse}`:b.agency||'—'}</div>
+              <div class="cell-company" style="font-family:var(--mono);font-size:10px;color:var(--accent);font-weight:500;">${b.invoice||'—'}</div>
+              <div class="cell-tags">
+                ${(!b.paid)?'<span class="tag tag-unpaid">Unpaid</span>':''}
+                ${!ovf&&b.dirty?'<span class="tag tag-dirty">Dirty</span>':''}
+                ${ovf&&b.owed_paid===false?'<span class="tag tag-owed">Owe GH</span>':''}
+                ${isCheckedIn?'<span class="tag" style="background:#e8f0eb;color:var(--accent);font-size:10px;">✓ In</span>':''}
+              </div>
             </div>
-          </div></td>`;
+          </td>`;
         }
       } else if(b&&!match){
         html+=`<td class="cell${ovf?' overflow-cell':''}" style="opacity:.25" title="${cellTip}"></td>`;
@@ -1933,6 +1943,28 @@ async function readVoucherPdf(){
   }
 }
 
+
+// ── CHECK-IN TOGGLE ───────────────────────────────────────
+async function toggleCheckedIn(id, dateStr, room){
+  const bArr=getBookings(dateStr,room);
+  const b=bArr.find(x=>x.id===id)||bArr[0];
+  if(!b)return;
+  const newVal=!b.checked_in;
+  // Update all records in this stay (all nights same name+room)
+  const {data}=await sb.from('bookings').select('id').eq('room',room).eq('name',b.name)
+    .gte('booking_date',b.checkin||dateStr).lte('booking_date',b.checkout||dateStr);
+  const ids=(data||[]).map(r=>r.id);
+  const {error}=await sb.from('bookings').update({checked_in:newVal}).in('id',ids);
+  if(error){showToast('Error: '+error.message,'error');return;}
+  // Update local cache
+  Object.keys(bookings).forEach(key=>{
+    (bookings[key]||[]).forEach(entry=>{
+      if(entry.name===b.name&&entry.room===room)entry.checked_in=newVal;
+    });
+  });
+  showToast(newVal?`${b.name} checked in!`:`${b.name} check-in undone`);
+  renderView();
+}
 function closeModal(){document.getElementById('modal-container').innerHTML='';}
 
 // ── ADD / EDIT MODAL ──────────────────────────────────────
@@ -2230,6 +2262,7 @@ async function saveBooking(defDate,defRoom,isOvf){
     voucher:uc(voucher)||null,
     notes:uc(document.getElementById('f-notes').value.trim()),
     cell:document.getElementById('f-cell').value.trim()||null,
+    checked_in:false,
     meal_breakfast:parseFloat(document.getElementById('f-meal-breakfast').value)||null,
     meal_lunch:parseFloat(document.getElementById('f-meal-lunch').value)||null,
     meal_dinner:parseFloat(document.getElementById('f-meal-dinner').value)||null,
@@ -4684,7 +4717,7 @@ async function loadAndRenderCashbookEntries(fromDate, toDate){
 
   // Fetch meal bookings (debits)
   const {data:bookingData,error:bErr}=await sb.from('bookings')
-    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner')
+    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,checked_in')
     .gte('checkin',fromDate).lte('checkin',toDate)
     .order('checkin',{ascending:true});
 
@@ -4704,7 +4737,7 @@ async function loadAndRenderCashbookEntries(fromDate, toDate){
   (bookingData||[]).forEach(b=>{
     const key=`${b.name}__${b.checkin}`;
     const daily=(parseFloat(b.meal_breakfast)||0)+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0);
-    if(!seen.has(key)&&daily>0){
+    if(!seen.has(key)&&daily>0&&b.checked_in){
       seen.add(key);
       const nights=b.checkin&&b.checkout?Math.max(Math.round((new Date(b.checkout)-new Date(b.checkin))/(1000*60*60*24)),1):1;
       debits.push({date:b.checkin,type:'debit',desc:`${b.invoice||'—'} — ${b.name}`,amount:daily*nights,nights});
