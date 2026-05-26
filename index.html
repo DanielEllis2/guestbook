@@ -578,7 +578,6 @@ input,select,textarea{font-size:16px;}
       <input class="search-input" id="search-input" type="text" placeholder="Search client, invoice..." oninput="onSearchInput(this.value)" />
     </div>
     <button class="add-btn" onclick="openAddModal(null,null,false)"><i class="ti ti-plus"></i><span class="btn-label"> New Booking</span></button>
-    <button class="add-btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);" onclick="openBulkPaymentModal()" title="Bulk mark invoices as paid/unpaid"><i class="ti ti-list-check"></i><span class="btn-label"> Bulk Pay</span></button>
     <button class="theme-btn" id="theme-toggle-btn" onclick="toggleDarkMode()" title="Toggle dark mode"><i class="ti ti-moon" id="theme-icon"></i></button>
     <button class="logout-btn" onclick="doLogout()" title="Sign out"><i class="ti ti-logout"></i><span class="btn-label"> Sign out</span></button>
     <button id="pwa-install-header-btn" style="display:none;padding:5px 12px;background:var(--accent-light);border:1px solid var(--accent);border-radius:6px;font-family:var(--font);font-size:12px;cursor:pointer;color:var(--accent);display:none;align-items:center;gap:5px;" onclick="installPWA()"><i class="ti ti-download" style="font-size:12px"></i> Install App</button>
@@ -3960,9 +3959,10 @@ async function renderRemittances(){
             <div class="remittance-invoice-status ${inv.stamped?'stamped':inv.matched?'found':'not-found'}">${inv.stamped?'Stamped':inv.matched?'Matched':'Not found'}</div>
           </div>`).join('')}
       </div>
-      ${r.status!=='stamped'&&matched>0?`
-      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;">
-        <button class="btn-primary" onclick="applyRemittanceStamps('${r.id}')"><i class="ti ti-stamp"></i> Stamp ${matched} Invoice${matched!==1?'s':''}</button>
+      ${matched>0?`
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center;">
+        <span style="font-size:12px;color:var(--muted);flex:1;">Marks ${matched} invoice${matched!==1?'s':''} (${invoices.filter(i=>i.matched).map(i=>i.invoice_number).join(', ')}) as paid</span>
+        <button class="btn-primary" onclick="markRemittanceAsPaid('${r.id}')"><i class="ti ti-circle-check"></i> Mark All as Paid</button>
       </div>`:''}
     </div>`;
   });
@@ -4201,27 +4201,42 @@ async function saveRemittance(){
 
   if(error){showToast('Error saving: '+error.message,'error');if(btn){btn.disabled=false;btn.textContent='Save & Stamp';}return;}
 
-  // Mark matching bookings as paid
-  const matchedInvoices=data.invoices.filter(i=>i.matched);
-  for(const inv of matchedInvoices){
-    const ids=inv.bookings.map(b=>b.id);
-    if(ids.length){
-      await sb.from('bookings').update({paid:true}).in('id',ids);
-    }
-  }
-
-  showToast(`Remittance saved! ${matchedInvoices.length} invoice${matchedInvoices.length!==1?'s':''} marked as paid.`);
+  showToast(`Remittance saved! Review the matches and click "Mark All as Paid" when ready.`);
   closeModal();
   renderRemittances();
-  // Refresh grid if on calendar view
+}
+
+async function markRemittanceAsPaid(remittanceId){
+  const r=remittances.find(x=>x.id===remittanceId);
+  if(!r)return;
+  const matchedInvoices=(r.invoices||[]).filter(i=>i.matched);
+  if(!matchedInvoices.length){showToast('No matched invoices to mark as paid','error');return;}
+
+  if(!confirm(`Mark ${matchedInvoices.length} invoice${matchedInvoices.length!==1?'s':''} as paid?\n\n${matchedInvoices.map(i=>i.invoice_number).join(', ')}`))return;
+
+  // Get all booking IDs for matched invoices
+  const invoiceNums=matchedInvoices.map(i=>i.invoice_number);
+  const {data:matchedBookings,error}=await sb.from('bookings').select('id,name,invoice').in('invoice',invoiceNums);
+  if(error){showToast('Error fetching bookings','error');return;}
+
+  const ids=(matchedBookings||[]).map(b=>b.id);
+  if(!ids.length){showToast('No bookings found for these invoices','error');return;}
+
+  const {error:updateError}=await sb.from('bookings').update({paid:true}).in('id',ids);
+  if(updateError){showToast('Error marking as paid: '+updateError.message,'error');return;}
+
+  // Update remittance status to completed
+  await sb.from('remittances').update({status:'stamped',invoices:(r.invoices||[]).map(i=>({...i,stamped:i.matched?true:false}))}).eq('id',remittanceId);
+
+  showToast(`${ids.length} booking${ids.length!==1?'s':''} marked as paid! ✓`);
+  renderRemittances();
+  // Refresh calendar if visible
   if(currentView==='week'||currentView==='month') loadAndRender(true);
 }
 
 async function applyRemittanceStamps(remittanceId){
   const r=remittances.find(x=>x.id===remittanceId);
   if(!r)return;
-  showToast('Stamping invoices... (PDF stamping will be available once invoices are uploaded to bookings)');
-  // Update status to stamped
   await sb.from('remittances').update({status:'stamped',invoices:(r.invoices||[]).map(i=>({...i,stamped:i.matched?true:false}))}).eq('id',remittanceId);
   showToast('All matched invoices stamped!');
   renderRemittances();
