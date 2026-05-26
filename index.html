@@ -591,6 +591,7 @@ input,select,textarea{font-size:16px;}
       <div class="period-label" id="period-label"></div>
       <button class="icon-btn" onclick="navigate(1)"><i class="ti ti-chevron-right"></i></button>
       <button class="icon-btn" onclick="goToday()" title="Today"><i class="ti ti-calendar-today"></i></button>
+      <button class="icon-btn" onclick="printBreakfastList()" title="Print Breakfast List" style="background:var(--accent-light);border-color:var(--accent);color:var(--accent);"><i class="ti ti-egg-fried"></i></button>
     </div>
     <div class="search-wrap">
       <i class="ti ti-search search-icon"></i>
@@ -2482,6 +2483,95 @@ async function saveEditedGroup(dateStr, room){
   closeModal();
   await loadAndRender();
   setTimeout(()=>openGroupDetailModal(dateStr,room),300);
+}
+
+// ── BREAKFAST LIST ────────────────────────────────────────
+async function printBreakfastList(){
+  // Get current week dates
+  const ws=getWeekStart(new Date(currentDate));
+  const days=Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(ws.getDate()+i);return d;});
+  const startStr=dateKey(days[0]);
+  const endStr=dateKey(days[6]);
+
+  // Fetch all bookings for this week that have breakfast_eaten = true and are checked in
+  const {data,error}=await sb.from('bookings')
+    .select('name,room,booking_date,checkin,checkout,breakfast_eaten,checked_in')
+    .gte('booking_date',startStr)
+    .lte('booking_date',endStr)
+    .eq('breakfast_eaten',true)
+    .order('booking_date',{ascending:true});
+
+  if(error){showToast('Error loading breakfast list: '+error.message,'error');return;}
+
+  // Group by booking_date, deduplicate by name+date (multi-night bookings repeat)
+  const byDate={};
+  days.forEach(d=>{byDate[dateKey(d)]=[];});
+  const seen=new Set();
+  (data||[]).forEach(b=>{
+    const key=`${b.name}__${b.booking_date}`;
+    if(!seen.has(key)){
+      seen.add(key);
+      if(byDate[b.booking_date])byDate[b.booking_date].push(b);
+    }
+  });
+
+  // Build print rows
+  let rowsHtml='';
+  let hasAny=false;
+  days.forEach(d=>{
+    const dStr=dateKey(d);
+    const guests=byDate[dStr]||[];
+    if(!guests.length)return;
+    hasAny=true;
+    const dayLabel=`${FULLDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)}`;
+    guests.forEach((g,i)=>{
+      rowsHtml+=`<tr>
+        ${i===0?`<td rowspan="${guests.length}" style="font-weight:700;vertical-align:top;padding:8px 12px;border-bottom:1px solid #e2ddd4;background:#f0ede6;white-space:nowrap;">${dayLabel}</td>`:''}
+        <td style="padding:8px 12px;border-bottom:1px solid #e2ddd4;font-weight:600;">${g.room}</td>
+      </tr>`;
+    });
+  });
+
+  if(!hasAny){
+    showToast('No guests eating breakfast this week','error');
+    return;
+  }
+
+  const weekLabel=`${days[0].getDate()} ${MONTHS[days[0].getMonth()].slice(0,3)} – ${days[6].getDate()} ${MONTHS[days[6].getMonth()].slice(0,3)} ${days[6].getFullYear()}`;
+
+  const win=window.open('','_blank','width=700,height:600');
+  win.document.write(`<!DOCTYPE html><html><head><title>Breakfast List — ${weekLabel}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1a1714;padding:28px;}
+    .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #2d5a3d;}
+    .logo{font-size:20px;font-weight:700;color:#2d5a3d;}
+    .sub{font-size:12px;color:#7a746b;margin-top:3px;}
+    .meta{text-align:right;font-size:12px;color:#7a746b;}
+    h2{font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+    table{width:100%;border-collapse:collapse;border:1px solid #e2ddd4;border-radius:6px;overflow:hidden;}
+    thead tr{background:#2d5a3d;}
+    th{padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:#fff;text-transform:uppercase;letter-spacing:.5px;}
+    tbody tr:nth-child(even) td{background:#fafaf8;}
+    .footer{margin-top:24px;font-size:11px;color:#7a746b;text-align:center;border-top:1px solid #e2ddd4;padding-top:10px;}
+    @media print{body{padding:14px;}}
+  </style></head><body>
+  <div class="hdr">
+    <div>
+      <div class="logo">Aroma Guesthouse</div>
+      <div class="sub">054 332 5448 · info@aromastay.co.za</div>
+    </div>
+    <div class="meta"><strong style="display:block;font-size:14px;color:#1a1714;">Breakfast List</strong>${weekLabel}<br>Printed: ${new Date().toLocaleDateString('en-ZA',{day:'2-digit',month:'long',year:'numeric'})}</div>
+  </div>
+  <table>
+    <thead><tr><th>Day</th><th>Room</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <div class="footer">Aroma Guesthouse · 58 Borcherd Street, Upington</div>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>win.print(),400);
 }
 function closeModal(){document.getElementById('modal-container').innerHTML='';}
 
