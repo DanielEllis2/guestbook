@@ -543,6 +543,7 @@ input,select,textarea{font-size:16px;}
         <button class="mobile-nav-link" id="mnav-companies" onclick="closeMobileNav();setView('companies')"><i class="ti ti-building"></i> Companies</button>
         <button class="mobile-nav-link" id="mnav-agencies" onclick="closeMobileNav();setView('agencies')"><i class="ti ti-briefcase"></i> Agencies</button>
         <button class="mobile-nav-link" id="mnav-guesthouses" onclick="closeMobileNav();setView('guesthouses')"><i class="ti ti-home"></i> Guesthouses</button>
+        <button class="mobile-nav-link" id="mnav-cashbook" onclick="closeMobileNav();setView('cashbook')"><i class="ti ti-book"></i> Cashbook</button>
         <button class="mobile-nav-link" id="mnav-remittances" onclick="closeMobileNav();setView('remittances')"><i class="ti ti-file-invoice"></i> Remittances</button>
         <div class="mobile-nav-divider"></div>
         <button class="mobile-nav-link" onclick="closeMobileNav();toggleDarkMode()"><i class="ti ti-moon" id="mnav-theme-icon"></i> <span id="mnav-theme-label">Toggle Dark Mode</span></button>
@@ -578,6 +579,7 @@ input,select,textarea{font-size:16px;}
       <input class="search-input" id="search-input" type="text" placeholder="Search client, invoice..." oninput="onSearchInput(this.value)" />
     </div>
     <button class="add-btn" onclick="openAddModal(null,null,false)"><i class="ti ti-plus"></i><span class="btn-label"> New Booking</span></button>
+    <button class="add-btn" onclick="setView('cashbook')" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);" title="Meal Cashbook"><i class="ti ti-book"></i><span class="btn-label"> Cashbook</span></button>
     <button class="theme-btn" id="theme-toggle-btn" onclick="toggleDarkMode()" title="Toggle dark mode"><i class="ti ti-moon" id="theme-icon"></i></button>
     <button class="logout-btn" onclick="doLogout()" title="Sign out"><i class="ti ti-logout"></i><span class="btn-label"> Sign out</span></button>
     <button id="pwa-install-header-btn" style="display:none;padding:5px 12px;background:var(--accent-light);border:1px solid var(--accent);border-radius:6px;font-family:var(--font);font-size:12px;cursor:pointer;color:var(--accent);display:none;align-items:center;gap:5px;" onclick="installPWA()"><i class="ti ti-download" style="font-size:12px"></i> Install App</button>
@@ -979,11 +981,13 @@ function setView(v){
   document.getElementById('clients-page').classList.toggle('active',v==='clients');
   document.getElementById('guesthouses-page').classList.toggle('active',v==='guesthouses');
   document.getElementById('remittances-page').classList.toggle('active',v==='remittances');
+  document.getElementById('cashbook-page').classList.toggle('active',v==='cashbook');
   if(v==='companies')renderCompanies();
   else if(v==='agencies')renderAgencies();
   else if(v==='clients')renderClients();
   else if(v==='guesthouses')renderGuesthouses();
   else if(v==='remittances')renderRemittances();
+  else if(v==='cashbook')renderCashbook();
   else loadAndRender();
 }
 function navigate(dir){
@@ -2036,6 +2040,18 @@ function openAddModal(dateStr,room,ovf){
     <div class="form-group"><label class="form-label">Cell Number</label><input class="form-input" id="f-cell" type="tel" placeholder="082 123 4567" /></div>
     <div class="form-group"><label class="form-label">Notes</label><input class="form-input" id="f-notes" placeholder="Any special requests..." /></div>
   </div>
+  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+    <div style="font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="ti ti-tools-kitchen-2" style="font-size:13px"></i> Meal Allowances (R per day)</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Breakfast (R)</label><input class="form-input" id="f-meal-breakfast" type="number" placeholder="0.00" oninput="calcMealTotal()" /></div>
+      <div class="form-group"><label class="form-label">Lunch (R)</label><input class="form-input" id="f-meal-lunch" type="number" placeholder="0.00" oninput="calcMealTotal()" /></div>
+      <div class="form-group"><label class="form-label">Dinner (R)</label><input class="form-input" id="f-meal-dinner" type="number" placeholder="0.00" oninput="calcMealTotal()" /></div>
+    </div>
+    <div id="meal-total-display" style="display:none;font-size:13px;color:var(--text);display:flex;justify-content:space-between;align-items:center;padding-top:4px;border-top:1px solid var(--border);">
+      <span style="color:var(--muted);">Total meal allowance</span>
+      <span id="meal-total-val" style="font-weight:700;color:var(--text);font-size:15px;"></span>
+    </div>
+  </div>
   <div class="form-group full">
     <label class="form-label" style="margin-bottom:6px;">PDF Attachments <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional)</span></label>
     <div class="pdf-upload-section">
@@ -2214,6 +2230,9 @@ async function saveBooking(defDate,defRoom,isOvf){
     voucher:uc(voucher)||null,
     notes:uc(document.getElementById('f-notes').value.trim()),
     cell:document.getElementById('f-cell').value.trim()||null,
+    meal_breakfast:parseFloat(document.getElementById('f-meal-breakfast').value)||null,
+    meal_lunch:parseFloat(document.getElementById('f-meal-lunch').value)||null,
+    meal_dinner:parseFloat(document.getElementById('f-meal-dinner').value)||null,
     paid:window._paid!==false,dirty:!ovf&&!!window._dirty,
     checkin:checkin||null,checkout:checkout||null,
     overflow:ovf,room,
@@ -2471,6 +2490,7 @@ function openDetailModal(dateStr,room){
       <button class="btn-danger" onclick="deleteBooking('${dateStr}','${room}')"><i class="ti ti-trash"></i> Delete</button>
       <button class="btn-extend" onclick="extendBooking('${dateStr}','${room}')"><i class="ti ti-arrow-bar-right"></i> Extend</button>
       <button class="btn-secondary" onclick="editBooking('${dateStr}','${room}')"><i class="ti ti-edit"></i> Edit</button>
+      <button class="btn-secondary" onclick="emailInvoice('${dateStr}','${room}')" style="background:var(--accent-light);border-color:var(--accent);color:var(--accent);"><i class="ti ti-mail"></i> Email</button>
       ${ovf?`<button class="btn-primary" onclick="toggleOwedPaidDB('${dateStr}','${room}')">${b.owed_paid===false?'Mark GH Paid':'Mark GH Unpaid'}</button>`
            :`<button class="btn-primary" onclick="togglePaidDB('${dateStr}','${room}')">${!b.paid?'Mark Paid':'Mark Unpaid'}</button>`}
     </div>
@@ -2612,6 +2632,10 @@ function editBooking(dateStr,room){
     document.getElementById('f-voucher').value=b.voucher||'';
     document.getElementById('f-notes').value=b.notes||'';
     document.getElementById('f-cell').value=b.cell||'';
+    document.getElementById('f-meal-breakfast').value=b.meal_breakfast||'';
+    document.getElementById('f-meal-lunch').value=b.meal_lunch||'';
+    document.getElementById('f-meal-dinner').value=b.meal_dinner||'';
+    calcMealTotal();
     document.getElementById('f-checkin').value=b.checkin||dateStr;
     document.getElementById('f-checkout').value=b.checkout||'';
     document.getElementById('f-room').value=room;
@@ -4551,6 +4575,198 @@ function closeMobileNav(){
   if(drawer)drawer.classList.remove('open');
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMobileNav();});
+
+// ── EMAIL INVOICE ─────────────────────────────────────────
+function emailInvoice(dateStr, room){
+  const b=getBooking(dateStr,room);
+  if(!b)return;
+  const guestName=b.name||'';
+  const invoice=b.invoice||'';
+  const checkin=b.checkin?formatDateStr(b.checkin):formatDateStr(dateStr);
+  const checkout=b.checkout?formatDateStr(b.checkout):'—';
+  const company=b.company||'';
+  const agency=b.agency||'';
+  const voucher=b.voucher||'';
+  const subject='Invoice'+(invoice?' — '+invoice:'')+' — '+guestName;
+  let body='Dear '+(agency||company||guestName)+',\n\n';
+  body+='Please find the invoice details for the following booking:\n\n';
+  body+='Guest: '+guestName+'\n';
+  if(company)body+='Company: '+company+'\n';
+  if(agency)body+='Agency: '+agency+'\n';
+  if(invoice)body+='Invoice #: '+invoice+'\n';
+  if(voucher)body+='Voucher #: '+voucher+'\n';
+  body+='Room: '+room+'\n';
+  body+='Check-in: '+checkin+'\n';
+  body+='Check-out: '+checkout+'\n';
+  if(b.invoice_pdf_url)body+='\nInvoice PDF: '+b.invoice_pdf_url+'\n';
+  if(b.voucher_pdf_url)body+='Voucher PDF: '+b.voucher_pdf_url+'\n';
+  body+='\nKind regards,\nAroma Guesthouse\n054 332 5448\ninfo@aromastay.co.za';
+  const a=document.createElement('a');
+  a.href='mailto:?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>a.remove(),100);
+}
+
+// ── MEAL TOTAL CALCULATOR ─────────────────────────────────
+function calcMealTotal(){
+  const b=parseFloat(document.getElementById('f-meal-breakfast').value)||0;
+  const l=parseFloat(document.getElementById('f-meal-lunch').value)||0;
+  const d=parseFloat(document.getElementById('f-meal-dinner').value)||0;
+  const daily=b+l+d;
+  const checkin=(document.getElementById('f-checkin')||{}).value;
+  const checkout=(document.getElementById('f-checkout')||{}).value;
+  const display=document.getElementById('meal-total-display');
+  const val=document.getElementById('meal-total-val');
+  if(!display||!val)return;
+  if(daily>0){
+    if(checkin&&checkout){
+      const nights=Math.round((new Date(checkout)-new Date(checkin))/(1000*60*60*24));
+      if(nights>0){
+        val.textContent=`R ${(daily*nights).toFixed(2)} (${nights} night${nights!==1?'s':''} × R ${daily.toFixed(2)}/day)`;
+        display.style.display='flex';return;
+      }
+    }
+    val.textContent=`R ${daily.toFixed(2)} /day`;
+    display.style.display='flex';
+  } else {
+    display.style.display='none';
+  }
+}
+
+// ── CASHBOOK ──────────────────────────────────────────────
+async function renderCashbook(){
+  const page=document.getElementById('cashbook-page');
+  if(!page)return;
+  const body=document.getElementById('cashbook-body');
+  if(body)body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td></tr>`;
+
+  // Get current month from the period selector
+  const year=currentDate.getFullYear();
+  const month=currentDate.getMonth();
+  const monthStart=dateKey(new Date(year,month,1));
+  const monthEnd=dateKey(new Date(year,month+1,0));
+
+  // Update month label
+  const lbl=document.getElementById('cashbook-month-label');
+  if(lbl)lbl.textContent=`${MONTHS[month]} ${year}`;
+
+  // Fetch bookings with meals in this month
+  const {data,error}=await sb.from('bookings')
+    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,room')
+    .gte('checkin',monthStart)
+    .lte('checkin',monthEnd)
+    .not('meal_breakfast','is',null)
+    .order('checkin',{ascending:true});
+
+  // Also fetch bookings with lunch or dinner (since we filter by any meal)
+  const {data:data2}=await sb.from('bookings')
+    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,room')
+    .gte('checkin',monthStart)
+    .lte('checkin',monthEnd)
+    .not('meal_lunch','is',null)
+    .order('checkin',{ascending:true});
+
+  const {data:data3}=await sb.from('bookings')
+    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,room')
+    .gte('checkin',monthStart)
+    .lte('checkin',monthEnd)
+    .not('meal_dinner','is',null)
+    .order('checkin',{ascending:true});
+
+  // Merge and deduplicate by id, only first record per booking (checkin date)
+  const allData=[...(data||[]),...(data2||[]),...(data3||[])];
+  const seen=new Set();
+  const unique=[];
+  allData.forEach(b=>{
+    // Use name+checkin as unique key (one line per booking stay)
+    const key=`${b.name}__${b.checkin}`;
+    if(!seen.has(key)&&(b.meal_breakfast||b.meal_lunch||b.meal_dinner)){
+      seen.add(key);unique.push(b);
+    }
+  });
+  unique.sort((a,b)=>a.checkin.localeCompare(b.checkin));
+
+  if(!body)return;
+  if(!unique.length){
+    body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">No meal allowances recorded for ${MONTHS[month]} ${year}</td></tr>`;
+    const tot=document.getElementById('cashbook-monthly-total');
+    if(tot)tot.textContent='R 0.00';
+    return;
+  }
+
+  let monthlyTotal=0;
+  let html='';
+  unique.forEach(b=>{
+    const daily=(parseFloat(b.meal_breakfast)||0)+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0);
+    const nights=b.checkin&&b.checkout?Math.round((new Date(b.checkout)-new Date(b.checkin))/(1000*60*60*24)):1;
+    const total=daily*Math.max(nights,1);
+    monthlyTotal+=total;
+    const d=parseDate(b.checkin);
+    const dateStr=`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+    html+=`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:10px 14px;font-size:13px;color:var(--muted);white-space:nowrap;">${dateStr}</td>
+      <td style="padding:10px 14px;font-size:13px;font-family:var(--mono);color:var(--accent);font-weight:500;">${b.invoice||'—'}</td>
+      <td style="padding:10px 14px;font-size:13px;font-weight:600;color:var(--text);">${b.name}</td>
+      <td style="padding:10px 14px;font-size:13px;color:var(--muted);">${nights} night${nights!==1?'s':''}</td>
+      <td style="padding:10px 14px;font-size:14px;font-weight:700;color:var(--text);text-align:right;">R ${total.toFixed(2)}</td>
+    </tr>`;
+  });
+  body.innerHTML=html;
+  const tot=document.getElementById('cashbook-monthly-total');
+  if(tot)tot.textContent=`R ${monthlyTotal.toFixed(2)}`;
+}
 </script>
+
+<div id="cashbook-page" class="page">
+  <div class="header">
+    <div class="header-brand">GuestBook <span>· Meal Cashbook</span></div>
+    <div class="nav-btns">
+      <button class="nav-btn" onclick="setView('week')"><i class="ti ti-calendar-week" style="font-size:13px;vertical-align:-1px"></i> Weekly</button>
+      <button class="nav-btn" onclick="setView('month')"><i class="ti ti-calendar-month" style="font-size:13px;vertical-align:-1px"></i> Monthly</button>
+      <button class="nav-btn" onclick="setView('clients')"><i class="ti ti-users" style="font-size:13px;vertical-align:-1px"></i> Clients</button>
+      <button class="nav-btn" onclick="setView('companies')"><i class="ti ti-building" style="font-size:13px;vertical-align:-1px"></i> Companies</button>
+      <button class="nav-btn" onclick="setView('agencies')"><i class="ti ti-briefcase" style="font-size:13px;vertical-align:-1px"></i> Agencies</button>
+      <button class="nav-btn" onclick="setView('guesthouses')"><i class="ti ti-home" style="font-size:13px;vertical-align:-1px"></i> Guesthouses</button>
+      <button class="nav-btn active" onclick="setView('cashbook')"><i class="ti ti-book" style="font-size:13px;vertical-align:-1px"></i> Cashbook</button>
+    </div>
+    <div class="header-nav">
+      <button class="icon-btn" onclick="cashbookNavigate(-1)"><i class="ti ti-chevron-left"></i></button>
+      <div class="period-label" id="cashbook-month-label"></div>
+      <button class="icon-btn" onclick="cashbookNavigate(1)"><i class="ti ti-chevron-right"></i></button>
+    </div>
+  </div>
+  <div class="page-body" style="max-width:900px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div class="page-title">Meal Allowance Cashbook</div>
+        <div class="page-subtitle">Meals paid out to guests — one line per booking</div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:var(--surface2);border-bottom:2px solid var(--border);">
+            <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Date</th>
+            <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Invoice #</th>
+            <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Guest Name</th>
+            <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Nights</th>
+            <th style="padding:10px 14px;text-align:right;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Total Meals</th>
+          </tr>
+        </thead>
+        <tbody id="cashbook-body">
+          <tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td></tr>
+        </tbody>
+        <tfoot>
+          <tr style="background:var(--surface2);border-top:2px solid var(--border);">
+            <td colspan="4" style="padding:12px 14px;font-size:14px;font-weight:700;color:var(--text);">Monthly Total</td>
+            <td style="padding:12px 14px;font-size:16px;font-weight:800;color:var(--text);text-align:right;" id="cashbook-monthly-total">R 0.00</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
 </body>
 </html>
