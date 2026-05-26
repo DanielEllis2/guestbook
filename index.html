@@ -2830,6 +2830,17 @@ function acSelect(id){
   document.getElementById('f-company').value=c.name;
   const list=document.getElementById('ac-list');
   if(list)list.style.display='none';
+  // Auto-fill meal allowances from company defaults
+  if(c.meal_breakfast||c.meal_lunch||c.meal_dinner){
+    const b=document.getElementById('f-meal-breakfast');
+    const l=document.getElementById('f-meal-lunch');
+    const d=document.getElementById('f-meal-dinner');
+    if(b&&c.meal_breakfast)b.value=c.meal_breakfast;
+    if(l&&c.meal_lunch)l.value=c.meal_lunch;
+    if(d&&c.meal_dinner)d.value=c.meal_dinner;
+    if(typeof calcMealTotal==='function')calcMealTotal();
+    showToast(`Meal rates loaded from ${c.name}`);
+  }
   // Clear agency and hint user to pick from linked agencies
   const agencyInput=document.getElementById('f-agency');
   if(agencyInput){
@@ -3005,6 +3016,7 @@ async function renderCompanies(){
           ${c.email?`<div class="company-card-detail"><i class="ti ti-mail"></i>${c.email}</div>`:''}
           ${c.address?`<div class="company-card-detail"><i class="ti ti-map-pin"></i>${c.address}</div>`:''}
           ${c.vat_number?`<div class="company-card-detail"><i class="ti ti-receipt-tax"></i>VAT: ${c.vat_number}</div>`:''}
+          ${(c.meal_breakfast||c.meal_lunch||c.meal_dinner)?`<div class="company-card-detail" style="color:var(--accent);font-weight:500;"><i class="ti ti-tools-kitchen-2"></i>Meals: ${[c.meal_breakfast?'B R'+c.meal_breakfast:'',c.meal_lunch?'L R'+c.meal_lunch:'',c.meal_dinner?'D R'+c.meal_dinner:''].filter(Boolean).join(' · ')}</div>`:''}
         </div>
       </div>
       ${linkedAgencies.length?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
@@ -3170,6 +3182,17 @@ function openCompanyModal(prefillName='',editId=''){
           <input class="form-input" id="fc-address" placeholder="123 Main Street, Johannesburg" value="${c&&c.address?c.address:''}" /></div>
         <div class="form-group full"><label class="form-label">VAT Number</label>
           <input class="form-input" id="fc-vat" placeholder="4123456789" value="${c&&c.vat_number?c.vat_number:''}" /></div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="ti ti-tools-kitchen-2" style="font-size:13px"></i> Default Meal Allowances (R per day)</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Breakfast (R)</label>
+              <input class="form-input" id="fc-meal-breakfast" type="number" placeholder="0.00" value="${c&&c.meal_breakfast?c.meal_breakfast:''}" /></div>
+            <div class="form-group"><label class="form-label">Lunch (R)</label>
+              <input class="form-input" id="fc-meal-lunch" type="number" placeholder="0.00" value="${c&&c.meal_lunch?c.meal_lunch:''}" /></div>
+            <div class="form-group"><label class="form-label">Dinner (R)</label>
+              <input class="form-input" id="fc-meal-dinner" type="number" placeholder="0.00" value="${c&&c.meal_dinner?c.meal_dinner:''}" /></div>
+          </div>
+        </div>
         <div class="form-group full">
           <label class="form-label">Linked Travel Agencies</label>
           <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;" id="fc-agencies">
@@ -3238,6 +3261,9 @@ async function saveCompany(editId){
     email:document.getElementById('fc-email').value.trim()||null,
     address:uc(document.getElementById('fc-address').value.trim())||null,
     vat_number:uc(document.getElementById('fc-vat').value.trim())||null,
+    meal_breakfast:parseFloat(document.getElementById('fc-meal-breakfast').value)||null,
+    meal_lunch:parseFloat(document.getElementById('fc-meal-lunch').value)||null,
+    meal_dinner:parseFloat(document.getElementById('fc-meal-dinner').value)||null,
   };
   // Collect checked agency ids
   const checked=[...document.querySelectorAll('#fc-agencies input[type=checkbox]:checked')].map(el=>el.value);
