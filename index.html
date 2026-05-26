@@ -1443,8 +1443,8 @@ function openGroupBookingModal(dateStr, room){
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Check-in Date *</label><input class="form-input" id="fg-checkin" type="date" value="${dateStr||''}" oninput="calcGroupGhTotal()" /></div>
-          <div class="form-group"><label class="form-label">Check-out Date</label><input class="form-input" id="fg-checkout" type="date" oninput="calcGroupGhTotal()" /></div>
+          <div class="form-group"><label class="form-label">Check-in Date *</label><input class="form-input" id="fg-checkin" type="date" value="${dateStr||''}" oninput="calcGroupGhTotal();calcGroupMealTotal()" /></div>
+          <div class="form-group"><label class="form-label">Check-out Date</label><input class="form-input" id="fg-checkout" type="date" oninput="calcGroupGhTotal();calcGroupMealTotal()" /></div>
         </div>
 
         <!-- GUESTHOUSE DETAILS -->
@@ -1472,6 +1472,20 @@ function openGroupBookingModal(dateStr, room){
               <span class="status-badge owed-paid active" id="sbg-owed-paid" onclick="toggleGroupOwed('paid')">Paid them</span>
               <span class="status-badge owed" id="sbg-owed" onclick="toggleGroupOwed('owed')">Still owe them</span>
             </div>
+          </div>
+        </div>
+
+        <!-- MEAL ALLOWANCES -->
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="ti ti-tools-kitchen-2" style="font-size:13px"></i> Meal Allowances (R per person per day)</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Breakfast (R)</label><input class="form-input" id="fg-meal-breakfast" type="number" placeholder="0.00" oninput="calcGroupMealTotal()" /></div>
+            <div class="form-group"><label class="form-label">Lunch (R)</label><input class="form-input" id="fg-meal-lunch" type="number" placeholder="0.00" oninput="calcGroupMealTotal()" /></div>
+            <div class="form-group"><label class="form-label">Dinner (R)</label><input class="form-input" id="fg-meal-dinner" type="number" placeholder="0.00" oninput="calcGroupMealTotal()" /></div>
+          </div>
+          <div id="group-meal-total-display" style="display:none;font-size:13px;color:var(--text);display:flex;justify-content:space-between;align-items:center;padding-top:4px;border-top:1px solid var(--border);">
+            <span style="color:var(--muted);">Total meal allowance for group</span>
+            <span id="group-meal-total-val" style="font-weight:700;color:var(--text);font-size:15px;"></span>
           </div>
         </div>
 
@@ -1547,6 +1561,7 @@ function updateGroupSummary(){
     sum.style.display='none';
   }
   calcGroupGhTotal();
+  if(typeof calcGroupMealTotal==='function')calcGroupMealTotal();
 }
 
 function calcGroupGhTotal(){
@@ -1676,6 +1691,9 @@ async function saveGroupBooking(defDate, defRoom){
       guesthouse,gh_room:ghRoom,gh_cost:ghCost,
       owed_paid:window._groupOwedPaid!==false,
       cell:null,invoice_pdf_url:null,voucher_pdf_url:null,aroma_pdf_url:null,
+      meal_breakfast:parseFloat(document.getElementById('fg-meal-breakfast').value)||null,
+      meal_lunch:parseFloat(document.getElementById('fg-meal-lunch').value)||null,
+      meal_dinner:parseFloat(document.getElementById('fg-meal-dinner').value)||null,
     };
     let cur=new Date(start);
     while((!checkout&&cur<=start)||(checkout&&cur<end)){
@@ -2024,6 +2042,34 @@ function removeScanVoucher(){
   if(input)input.value='';
   const row=document.getElementById('read-voucher-row');
   if(row)row.style.display='none';
+}
+
+function calcGroupMealTotal(){
+  const b=parseFloat(document.getElementById('fg-meal-breakfast').value)||0;
+  const l=parseFloat(document.getElementById('fg-meal-lunch').value)||0;
+  const d=parseFloat(document.getElementById('fg-meal-dinner').value)||0;
+  const daily=b+l+d;
+  const checkin=(document.getElementById('fg-checkin')||{}).value;
+  const checkout=(document.getElementById('fg-checkout')||{}).value;
+  const names=[...document.querySelectorAll('.group-name-input')].map(i=>i.value.trim()).filter(Boolean);
+  const count=Math.max(names.length,1);
+  const display=document.getElementById('group-meal-total-display');
+  const val=document.getElementById('group-meal-total-val');
+  if(!display||!val)return;
+  if(daily>0){
+    if(checkin&&checkout){
+      const nights=Math.round((new Date(checkout)-new Date(checkin))/(1000*60*60*24));
+      if(nights>0){
+        const total=daily*nights*count;
+        val.textContent=`R ${total.toFixed(2)} (${count} person${count!==1?'s':''} × ${nights} night${nights!==1?'s':''} × R ${daily.toFixed(2)}/day)`;
+        display.style.display='flex';return;
+      }
+    }
+    val.textContent=`R ${(daily*count).toFixed(2)}/day (${count} person${count!==1?'s':''} × R ${daily.toFixed(2)})`;
+    display.style.display='flex';
+  } else {
+    display.style.display='none';
+  }
 }
 function closeModal(){document.getElementById('modal-container').innerHTML='';}
 
