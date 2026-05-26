@@ -1244,16 +1244,23 @@ function renderWeek(){
         if(ovf){cls='cell overflow-cell';if(bArr.some(x=>x.paid===false||x.paid===null))cls+=' unpaid';}
         else{if(b.dirty)cls+=' dirty';if(b.paid===false||b.paid===null)cls+=' unpaid';}
         if(isGroup){
-          const groupTip=`${cellTip} | Group of ${bArr.length}: ${bArr.map(x=>x.name).join(', ')}`;
-          html+=`<td class="${cls}" onclick="openGroupDetailModal('${dStr}','${room}')" title="${groupTip}"><div class="cell-content">
-            <div class="cell-name">Group of ${bArr.length}</div>
-            <div class="cell-company">${b.guesthouse?`<i class="ti ti-building" style="font-size:10px"></i> ${b.guesthouse}`:b.agency||'—'}</div>
-            <div class="cell-company" style="font-family:var(--mono);font-size:10px;color:var(--accent);font-weight:500;">${b.invoice||'—'}</div>
-            <div class="cell-tags">
-              ${bArr.some(x=>!x.paid)?'<span class="tag tag-unpaid">Unpaid</span>':''}
-              ${ovf&&bArr.some(x=>x.owed_paid===false)?'<span class="tag tag-owed">Owe GH</span>':''}
+          const checkedInCount=bArr.filter(x=>x.checked_in).length;
+          const allCheckedIn=checkedInCount===bArr.length;
+          if(allCheckedIn)cls+=' checked-in';
+          const groupTip=`${cellTip} | Group of ${bArr.length}: ${bArr.map(x=>x.name).join(', ')} | ${checkedInCount}/${bArr.length} checked in`;
+          html+=`<td class="${cls}" style="position:relative;" onclick="openGroupDetailModal('${dStr}','${room}')" title="${groupTip}">
+            <div class="checkin-tick${allCheckedIn?' ticked':checkedInCount>0?' partial':''}" onclick="event.stopPropagation();openGroupCheckinModal('${dStr}','${room}')" title="${allCheckedIn?'All checked in':'Check in group members'}" style="${!allCheckedIn&&checkedInCount>0?'background:#fef3c7;border-color:#d97706;color:#92400e;':''}">${allCheckedIn?'✓':checkedInCount>0?checkedInCount+'/'+bArr.length:''}</div>
+            <div class="cell-content">
+              <div class="cell-name">Group of ${bArr.length}</div>
+              <div class="cell-company">${b.guesthouse?`<i class="ti ti-building" style="font-size:10px"></i> ${b.guesthouse}`:b.agency||'—'}</div>
+              <div class="cell-company" style="font-family:var(--mono);font-size:10px;color:var(--accent);font-weight:500;">${b.invoice||'—'}</div>
+              <div class="cell-tags">
+                ${bArr.some(x=>!x.paid)?'<span class="tag tag-unpaid">Unpaid</span>':''}
+                ${ovf&&bArr.some(x=>x.owed_paid===false)?'<span class="tag tag-owed">Owe GH</span>':''}
+                ${allCheckedIn?'<span class="tag" style="background:#e8f0eb;color:var(--accent);font-size:10px;">✓ All In</span>':checkedInCount>0?`<span class="tag" style="background:#fef3c7;color:#92400e;font-size:10px;">${checkedInCount}/${bArr.length} In</span>`:''}
+              </div>
             </div>
-          </div></td>`;
+          </td>`;
         } else {
           const singleTip=`${cellTip} | ${b.name}${b.company?' | '+b.company:''}${b.agency?' | '+b.agency:''}${ovf&&b.guesthouse?' @ '+b.guesthouse:''}`;
           const isCheckedIn=!!b.checked_in;
@@ -1383,6 +1390,10 @@ function switchToGroupBooking(dateStr, room){
     if(checkin){const el=document.getElementById('fg-checkin');if(el)el.value=checkin;}
     if(checkout){const el=document.getElementById('fg-checkout');if(el)el.value=checkout;}
     if(guesthouse){const el=document.getElementById('fg-guesthouse');if(el)el.value=guesthouse;}
+    // Carry over breakfast eaten state
+    const srcTick=document.getElementById('f-breakfast-eaten');
+    const dstTick=document.getElementById('fg-breakfast-eaten');
+    if(srcTick&&dstTick&&srcTick.checked){dstTick.checked=true;toggleGroupBreakfastEaten();}
     // gh-room not used in group bookings
     if(ghCost){const el=document.getElementById('fg-gh-cost');if(el){el.value=ghCost;calcGroupGhTotal();}}
     // Pre-fill first name row if user had already typed a name
@@ -1406,13 +1417,18 @@ function openGroupBookingModal(dateStr, room){
         <!-- GROUP NAMES -->
         <div class="form-group full">
           <label class="form-label" style="font-size:13px;font-weight:600;color:var(--overflow-text);margin-bottom:6px;display:flex;align-items:center;gap:6px;"><i class="ti ti-users" style="font-size:13px"></i> Group Members</label>
+          <div style="display:grid;grid-template-columns:1fr auto auto;gap:4px;padding:0 0 4px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">
+            <span>Name</span><span style="text-align:center;white-space:nowrap;">Ate B/fast</span><span></span>
+          </div>
           <div class="group-names-list" id="group-names-list">
-            <div class="group-name-row" data-idx="0">
+            <div class="group-name-row" data-idx="0" style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;">
               <input type="text" placeholder="Person 1 — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,0)" />
+              <input type="checkbox" class="group-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" onchange="calcGroupMealTotal()" />
               <button class="group-name-remove" onclick="removeGroupName(0)" title="Remove">✕</button>
             </div>
-            <div class="group-name-row" data-idx="1">
+            <div class="group-name-row" data-idx="1" style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;">
               <input type="text" placeholder="Person 2 — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,1)" />
+              <input type="checkbox" class="group-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" onchange="calcGroupMealTotal()" />
               <button class="group-name-remove" onclick="removeGroupName(1)" title="Remove">✕</button>
             </div>
           </div>
@@ -1457,8 +1473,18 @@ function openGroupBookingModal(dateStr, room){
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Check-in Date *</label><input class="form-input" id="fg-checkin" type="date" value="${dateStr||''}" oninput="calcGroupGhTotal();calcGroupMealTotal()" /></div>
-          <div class="form-group"><label class="form-label">Check-out Date</label><input class="form-input" id="fg-checkout" type="date" oninput="calcGroupGhTotal();calcGroupMealTotal()" /></div>
+          <div class="form-group"><label class="form-label">Check-in Date *</label><input class="form-input" id="fg-checkin" type="date" value="${dateStr||''}" oninput="calcGroupGhTotal();calcGroupMealTotal();calcGroupAgencyIncome()" /></div>
+          <div class="form-group"><label class="form-label">Check-out Date</label><input class="form-input" id="fg-checkout" type="date" oninput="calcGroupGhTotal();calcGroupMealTotal();calcGroupAgencyIncome()" /></div>
+        </div>
+
+        <!-- AGENCY INCOME -->
+        <div id="group-agency-income-display" style="display:none;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:5px;"><i class="ti ti-home" style="font-size:12px"></i> Agency Payment to Me</div>
+          <div id="group-agency-income-breakdown" style="display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid var(--accent);opacity:.5;">
+            <span style="font-size:13px;font-weight:600;color:var(--accent);">Total I receive</span>
+            <span id="group-agency-income-val" style="font-weight:700;color:var(--accent);font-size:18px;"></span>
+          </div>
         </div>
 
         <!-- GUESTHOUSE DETAILS -->
@@ -1492,8 +1518,11 @@ function openGroupBookingModal(dateStr, room){
         <!-- MEAL ALLOWANCES -->
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
           <div style="font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="ti ti-tools-kitchen-2" style="font-size:13px"></i> Meal Allowances (R per person per day)</div>
-          <div class="form-row">
-            <div class="form-group"><label class="form-label">Breakfast (R)</label><input class="form-input" id="fg-meal-breakfast" type="number" placeholder="0.00" oninput="calcGroupMealTotal()" /></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+            <div class="form-group">
+              <label class="form-label">Breakfast (R) <span style="font-size:10px;color:var(--muted);font-weight:400;">↑ tick above</span></label>
+              <input class="form-input" id="fg-meal-breakfast" type="number" placeholder="0.00" oninput="calcGroupMealTotal()" />
+            </div>
             <div class="form-group"><label class="form-label">Lunch (R)</label><input class="form-input" id="fg-meal-lunch" type="number" placeholder="0.00" oninput="calcGroupMealTotal()" /></div>
             <div class="form-group"><label class="form-label">Dinner (R)</label><input class="form-input" id="fg-meal-dinner" type="number" placeholder="0.00" oninput="calcGroupMealTotal()" /></div>
           </div>
@@ -1524,6 +1553,7 @@ function openGroupBookingModal(dateStr, room){
   document.getElementById('modal-container').innerHTML=html;
   window._groupPaid=false;
   window._groupOwedPaid=true;
+  window._savedGroupBreakfastAmount='';
   // Focus first name input
   setTimeout(()=>{const first=document.querySelector('.group-name-input');if(first)first.focus();},50);
 }
@@ -1535,7 +1565,11 @@ function addGroupNameRow(){
   const row=document.createElement('div');
   row.className='group-name-row';
   row.dataset.idx=idx;
-  row.innerHTML=`<input type="text" placeholder="Person ${idx+1} — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,${idx})" /><button class="group-name-remove" onclick="removeGroupName(${idx})" title="Remove">✕</button>`;
+  row.style.display='grid';
+  row.style.gridTemplateColumns='1fr auto auto';
+  row.style.gap='6px';
+  row.style.alignItems='center';
+  row.innerHTML=`<input type="text" placeholder="Person ${idx+1} — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,${idx})" /><input type="checkbox" class="group-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" onchange="calcGroupMealTotal()" /><button class="group-name-remove" onclick="removeGroupName(${idx})" title="Remove">✕</button>`;
   list.appendChild(row);
   row.querySelector('input').focus();
   updateGroupSummary();
@@ -1576,6 +1610,7 @@ function updateGroupSummary(){
   }
   calcGroupGhTotal();
   if(typeof calcGroupMealTotal==='function')calcGroupMealTotal();
+  if(typeof calcGroupAgencyIncome==='function')calcGroupAgencyIncome();
 }
 
 function calcGroupGhTotal(){
@@ -1636,20 +1671,63 @@ function acCompanyGroup(val){
   list.innerHTML=html;list.style.display=matches.length?'block':'none';
 }
 function acKeyGroup(e){const list=document.getElementById('ac-list-group');if(!list||list.style.display==='none')return;if(e.key==='Escape')list.style.display='none';}
-function acSelectGroup(id){const c=companies.find(x=>x.id===id);if(!c)return;document.getElementById('fg-company').value=c.name;const list=document.getElementById('ac-list-group');if(list)list.style.display='none';}
+function acSelectGroup(id){
+  const c=companies.find(x=>x.id===id);
+  if(!c)return;
+  document.getElementById('fg-company').value=c.name;
+  const list=document.getElementById('ac-list-group');
+  if(list)list.style.display='none';
+  // Auto-fill meal allowances from company defaults
+  if(c.meal_breakfast||c.meal_lunch||c.meal_dinner){
+    const b=document.getElementById('fg-meal-breakfast');
+    const l=document.getElementById('fg-meal-lunch');
+    const d=document.getElementById('fg-meal-dinner');
+    if(b&&c.meal_breakfast){b.value=c.meal_breakfast;window._savedGroupBreakfastAmount=c.meal_breakfast;}
+    if(l&&c.meal_lunch)l.value=c.meal_lunch;
+    if(d&&c.meal_dinner)d.value=c.meal_dinner;
+    if(typeof calcGroupMealTotal==='function')calcGroupMealTotal();
+    if(typeof calcGroupAgencyIncome==='function')calcGroupAgencyIncome();
+    showToast(`Meal rates loaded from ${c.name}`);
+  }
+  // Focus agency field and filter by linked agencies
+  const agencyInput=document.getElementById('fg-agency');
+  if(agencyInput){
+    agencyInput.value='';
+    agencyInput.placeholder=c.agency_ids&&c.agency_ids.length?'Pick agency for this company...':'Agency name';
+    agencyInput.focus();
+    acAgencyGroup('',c.id);
+  }
+}
 
-function acAgencyGroup(val){
+function acAgencyGroup(val, companyId){
   const list=document.getElementById('ac-agency-list-group');
   if(!list)return;
-  if(!val.trim()){list.style.display='none';return;}
-  const q=val.toLowerCase();
-  const matches=agencies.filter(a=>a.name.toLowerCase().includes(q));
+  // Get linked agencies for current company
+  const companyName=(document.getElementById('fg-company')||{}).value||'';
+  const linkedCompany=companies.find(c=>c.name.toLowerCase()===companyName.toLowerCase());
+  const linkedIds=linkedCompany&&linkedCompany.agency_ids?linkedCompany.agency_ids:[];
+  let linked=[], others=[];
+  if(linkedIds.length){linked=agencies.filter(a=>linkedIds.includes(a.id));others=agencies.filter(a=>!linkedIds.includes(a.id));}
+  else{others=agencies;}
+  const q=(val||'').toLowerCase();
+  const filterFn=a=>!q||a.name.toLowerCase().includes(q);
+  const matchedLinked=linked.filter(filterFn);
+  const matchedOthers=others.filter(filterFn);
+  if(!matchedLinked.length&&!matchedOthers.length&&!val){list.style.display='none';return;}
   let html='';
-  matches.forEach(a=>{html+=`<div class="autocomplete-item" onclick="acAgencySelectGroup('${a.id}')"><div class="autocomplete-item-name">${a.name}</div>${a.contact_person?`<div class="autocomplete-item-detail">${a.contact_person}</div>`:''}</div>`;});
-  list.innerHTML=html;list.style.display=matches.length?'block':'none';
+  if(matchedLinked.length){
+    html+=`<div style="padding:4px 12px;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);">Linked to this company</div>`;
+    matchedLinked.forEach(a=>{html+=`<div class="autocomplete-item" onclick="acAgencySelectGroup('${a.id}')"><div class="autocomplete-item-name">${a.name}</div>${a.contact_person?`<div class="autocomplete-item-detail">${a.contact_person}</div>`:''}</div>`;});
+  }
+  if(matchedOthers.length){
+    if(matchedLinked.length)html+=`<div style="padding:4px 12px;font-size:11px;font-weight:600;color:var(--muted);">All agencies</div>`;
+    matchedOthers.forEach(a=>{html+=`<div class="autocomplete-item" onclick="acAgencySelectGroup('${a.id}')"><div class="autocomplete-item-name">${a.name}</div>${a.contact_person?`<div class="autocomplete-item-detail">${a.contact_person}</div>`:''}</div>`;});
+  }
+  if(val)html+=`<div class="autocomplete-new" onclick="openAgencyModal('${val.replace(/'/g,"\'")}')"><i class="ti ti-plus" style="font-size:12px"></i> Add "${val}" as new agency</div>`;
+  list.innerHTML=html;list.style.display=html?'block':'none';
 }
 function acAgencyKeyGroup(e){const list=document.getElementById('ac-agency-list-group');if(!list||list.style.display==='none')return;if(e.key==='Escape')list.style.display='none';}
-function acAgencySelectGroup(id){const a=agencies.find(x=>x.id===id);if(!a)return;document.getElementById('fg-agency').value=a.name;const list=document.getElementById('ac-agency-list-group');if(list)list.style.display='none';}
+function acAgencySelectGroup(id){const a=agencies.find(x=>x.id===id);if(!a)return;document.getElementById('fg-agency').value=a.name;const list=document.getElementById('ac-agency-list-group');if(list)list.style.display='none';if(typeof calcGroupAgencyIncome==='function')calcGroupAgencyIncome();}
 
 function acGuesthouseGroup(val){
   const list=document.getElementById('ac-guesthouse-list-group');
@@ -1670,8 +1748,12 @@ function acGuesthouseSelectGroup(id){
 }
 
 async function saveGroupBooking(defDate, defRoom){
-  const inputs=[...document.querySelectorAll('.group-name-input')];
-  const names=inputs.map(i=>i.value.trim().toUpperCase()).filter(Boolean);
+  const rows=[...document.querySelectorAll('#group-names-list .group-name-row')];
+  const personData=rows.map(r=>({
+    name:(r.querySelector('.group-name-input')||{}).value?.trim().toUpperCase()||'',
+    breakfastEaten:!!(r.querySelector('.group-breakfast-tick')&&r.querySelector('.group-breakfast-tick').checked),
+  })).filter(p=>p.name);
+  const names=personData.map(p=>p.name);
   if(!names.length){showToast('Please add at least one person to the group.','error');return;}
 
   const room=document.getElementById('fg-room').value;
@@ -1696,7 +1778,8 @@ async function saveGroupBooking(defDate, defRoom){
   const end=checkout?parseDate(checkout):start;
   const allRecords=[];
 
-  for(const name of names){
+  for(const person of personData){
+    const name=person.name;
     const base={
       name,company,agency,invoice:uc(invoice),voucher,notes,
       paid:window._groupPaid===true,dirty:false,
@@ -1705,7 +1788,8 @@ async function saveGroupBooking(defDate, defRoom){
       guesthouse,gh_room:ghRoom,gh_cost:ghCost,
       owed_paid:window._groupOwedPaid!==false,
       cell:null,invoice_pdf_url:null,voucher_pdf_url:null,aroma_pdf_url:null,
-      meal_breakfast:parseFloat(document.getElementById('fg-meal-breakfast').value)||null,
+      meal_breakfast:person.breakfastEaten?0:(parseFloat(document.getElementById('fg-meal-breakfast').value)||null),
+      breakfast_eaten:person.breakfastEaten,
       meal_lunch:parseFloat(document.getElementById('fg-meal-lunch').value)||null,
       meal_dinner:parseFloat(document.getElementById('fg-meal-dinner').value)||null,
     };
@@ -1758,8 +1842,7 @@ function openGroupDetailModal(dateStr, room){
                 <span style="font-size:13px;font-weight:600;color:var(--overflow-text);">${person.name}</span>
               </div>
               <div style="display:flex;gap:6px;align-items:center;">
-                ${person.paid===false?'<span class="tag tag-unpaid">Unpaid</span>':'<span style="font-size:11px;color:var(--accent);font-weight:500;">✓ Paid</span>'}
-                <button onclick="toggleGroupMemberPaid('${dateStr}','${room}','${person.id}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-family:var(--font);color:var(--muted);">${person.paid===false?'Mark Paid':'Mark Unpaid'}</button>
+  
               </div>
             </div>`).join('')}
         </div>
@@ -1855,6 +1938,7 @@ function openGroupDetailModal(dateStr, room){
       </div>
       <div class="modal-footer">
         <button class="btn-danger" onclick="deleteGroupBooking('${dateStr}','${room}')"><i class="ti ti-trash"></i> Delete Group</button>
+        <button class="btn-secondary" onclick="openEditGroupModal('${dateStr}','${room}')"><i class="ti ti-edit"></i> Edit Group</button>
         <button class="btn-primary" onclick="toggleGroupOwedPaidDB('${dateStr}','${room}')" style="background:var(--overflow-border);">${b.owed_paid===false?'Mark GH Paid':'Mark GH Unpaid'}</button>
       </div>
     </div>
@@ -2009,6 +2093,9 @@ async function toggleCheckedIn(id, dateStr, room){
     });
   });
   showToast(newVal?`${b.name} checked in!`:`${b.name} check-in undone`);
+  const gc=document.getElementById('grid-container');
+  window._savedScrollX=gc?gc.scrollLeft:0;
+  window._savedScrollY=gc?gc.scrollTop:0;
   renderView();
 }
 
@@ -2059,27 +2146,30 @@ function removeScanVoucher(){
 }
 
 function calcGroupMealTotal(){
-  const b=parseFloat(document.getElementById('fg-meal-breakfast').value)||0;
-  const l=parseFloat(document.getElementById('fg-meal-lunch').value)||0;
-  const d=parseFloat(document.getElementById('fg-meal-dinner').value)||0;
-  const daily=b+l+d;
+  const bRate=parseFloat((document.getElementById('fg-meal-breakfast')||{}).value)||0;
+  const l=parseFloat((document.getElementById('fg-meal-lunch')||{}).value)||0;
+  const d=parseFloat((document.getElementById('fg-meal-dinner')||{}).value)||0;
   const checkin=(document.getElementById('fg-checkin')||{}).value;
   const checkout=(document.getElementById('fg-checkout')||{}).value;
-  const names=[...document.querySelectorAll('.group-name-input')].map(i=>i.value.trim()).filter(Boolean);
+  const rows=[...document.querySelectorAll('#group-names-list .group-name-row')];
+  const names=rows.map(r=>(r.querySelector('.group-name-input')||{}).value||'').filter(Boolean);
   const count=Math.max(names.length,1);
+  const nights=(checkin&&checkout)?Math.max(Math.round((new Date(checkout)-new Date(checkin))/(1000*60*60*24)),1):1;
   const display=document.getElementById('group-meal-total-display');
   const val=document.getElementById('group-meal-total-val');
   if(!display||!val)return;
-  if(daily>0){
-    if(checkin&&checkout){
-      const nights=Math.round((new Date(checkout)-new Date(checkin))/(1000*60*60*24));
-      if(nights>0){
-        const total=daily*nights*count;
-        val.textContent=`R ${total.toFixed(2)} (${count} person${count!==1?'s':''} × ${nights} night${nights!==1?'s':''} × R ${daily.toFixed(2)}/day)`;
-        display.style.display='flex';return;
-      }
-    }
-    val.textContent=`R ${(daily*count).toFixed(2)}/day (${count} person${count!==1?'s':''} × R ${daily.toFixed(2)})`;
+  // Count how many people are NOT eating physically (need cash)
+  const ticks=[...document.querySelectorAll('.group-breakfast-tick')];
+  const ateCount=ticks.filter(t=>t.checked).length;
+  const cashCount=count-ateCount;
+  const totalPerPerson=(n)=>((n===0?0:bRate)+l+d)*nights; // n=0 means ate breakfast
+  const totalCash=cashCount*totalPerPerson(1)+(ateCount*(l+d)*nights);
+  const dailyAvg=l+d+(cashCount>0?bRate:0);
+  if(bRate>0||l>0||d>0){
+    let breakdown=`${count} person${count!==1?'s':''} × ${nights} night${nights!==1?'s':''}`;
+    if(bRate>0&&ateCount>0)breakdown+=` | ${ateCount} ate breakfast (no cash)`;
+    if(bRate>0&&cashCount>0)breakdown+=` | ${cashCount} need breakfast cash`;
+    val.textContent=`R ${totalCash.toFixed(2)} — ${breakdown}`;
     display.style.display='flex';
   } else {
     display.style.display='none';
@@ -2110,6 +2200,283 @@ function toggleBreakfastEaten(){
     field.style.opacity='1';
   }
   calcMealTotal();
+}
+
+function toggleGroupBreakfastEaten(){
+  const ticked=document.getElementById('fg-breakfast-eaten').checked;
+  const field=document.getElementById('fg-meal-breakfast');
+  if(!field)return;
+  if(ticked){
+    window._savedGroupBreakfastAmount=field.value;
+    field.value='0';
+    field.disabled=true;
+    field.style.opacity='0.4';
+  } else {
+    let restoreVal=window._savedGroupBreakfastAmount;
+    if(!restoreVal||restoreVal==='0'){
+      const companyName=(document.getElementById('fg-company')||{}).value||'';
+      const comp=companies.find(c=>c.name===companyName);
+      if(comp&&comp.meal_breakfast)restoreVal=comp.meal_breakfast;
+    }
+    field.value=restoreVal||'';
+    field.disabled=false;
+    field.style.opacity='1';
+  }
+  calcGroupMealTotal();
+}
+
+function calcGroupAgencyIncome(){
+  const checkin=(document.getElementById('fg-checkin')||{}).value;
+  const checkout=(document.getElementById('fg-checkout')||{}).value;
+  const display=document.getElementById('group-agency-income-display');
+  const breakdown=document.getElementById('group-agency-income-breakdown');
+  const val=document.getElementById('group-agency-income-val');
+  if(!display||!val)return;
+
+  // Get company daily rate
+  const companyName=(document.getElementById('fg-company')||{}).value||'';
+  const agencyName=(document.getElementById('fg-agency')||{}).value||'';
+  const comp=companies.find(c=>c.name===companyName);
+  const agency=agencies.find(a=>a.name===agencyName);
+  const compRate=comp&&comp.daily_rate?parseFloat(comp.daily_rate):0;
+  const agencyComm=agency&&agency.commission?parseFloat(agency.commission):0;
+  const totalRate=compRate+agencyComm;
+
+  const rows=[...document.querySelectorAll('#group-names-list .group-name-row')];
+  const count=rows.filter(r=>(r.querySelector('.group-name-input')||{}).value?.trim()).length||0;
+
+  if(totalRate>0&&checkin&&checkout&&count>0){
+    const nights=Math.max(Math.round((new Date(checkout)-new Date(checkin))/(1000*60*60*24)),1);
+    const total=totalRate*nights*count;
+    let rows_html='';
+    if(compRate>0)rows_html+=`<div style="display:flex;justify-content:space-between;"><span>Company rate</span><span style="color:var(--text);font-weight:500;">R ${compRate.toFixed(2)}/night</span></div>`;
+    if(agencyComm>0)rows_html+=`<div style="display:flex;justify-content:space-between;"><span>Agency commission</span><span style="color:var(--text);font-weight:500;">R ${agencyComm.toFixed(2)}/night</span></div>`;
+    rows_html+=`<div style="display:flex;justify-content:space-between;"><span>Total per person per night</span><span style="color:var(--text);font-weight:500;">R ${totalRate.toFixed(2)}</span></div>`;
+    rows_html+=`<div style="display:flex;justify-content:space-between;"><span>People</span><span style="color:var(--text);font-weight:500;">${count}</span></div>`;
+    rows_html+=`<div style="display:flex;justify-content:space-between;"><span>Nights</span><span style="color:var(--text);font-weight:500;">${nights}</span></div>`;
+    if(breakdown)breakdown.innerHTML=rows_html;
+    val.textContent=`R ${total.toFixed(2)}`;
+    display.style.display='flex';
+  } else {
+    display.style.display='none';
+  }
+}
+
+// ── GROUP CHECK-IN MODAL ──────────────────────────────────
+function openGroupCheckinModal(dateStr, room){
+  const bArr=getBookings(dateStr,room);
+  if(!bArr.length)return;
+  const checkedInCount=bArr.filter(x=>x.checked_in).length;
+  const allIn=checkedInCount===bArr.length;
+
+  const memberRows=bArr.map((person,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;${i>0?'border-top:1px solid var(--border)':''}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:30px;height:30px;border-radius:7px;background:${person.checked_in?'var(--accent)':'var(--surface2)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${person.checked_in?'#fff':'var(--muted)'};flex-shrink:0;">${person.checked_in?'✓':person.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+        <span style="font-size:13px;font-weight:600;color:var(--text);">${person.name}</span>
+      </div>
+      <button onclick="toggleGroupMemberCheckin('${person.id}','${dateStr}','${room}')" style="padding:6px 14px;border-radius:7px;font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid ${person.checked_in?'#fca5a5':'var(--accent)'};background:${person.checked_in?'#fee2e2':'var(--accent-light)'};color:${person.checked_in?'#9b1c1c':'var(--accent)'};">
+        ${person.checked_in?'Undo check-in':'Check In'}
+      </button>
+    </div>`).join('');
+
+  document.getElementById('modal-container').innerHTML=`
+    <div class="modal-backdrop" onclick="if(event.target===this)closeModal()">
+      <div class="modal" style="max-width:440px;">
+        <div class="modal-header${allIn?' ':' '}" style="${allIn?'background:var(--accent-light);border-bottom-color:var(--accent);':''}">
+          <div>
+            <div class="modal-title" style="display:flex;align-items:center;gap:8px;">
+              <i class="ti ti-users" style="color:var(--accent)"></i> Group Check-In
+            </div>
+            <div class="modal-subtitle">${room} · ${checkedInCount} of ${bArr.length} checked in</div>
+          </div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          ${allIn?`<div style="background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--accent);font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:4px;"><i class="ti ti-circle-check" style="font-size:16px"></i> All ${bArr.length} members checked in!</div>`:''}
+          ${!allIn?`<div style="background:#fef3c7;border:1px solid #d97706;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;margin-bottom:4px;">Tick each person as they arrive — cashbook updates only when all are checked in</div>`:''}
+          <div style="display:flex;flex-direction:column;">${memberRows}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function toggleGroupMemberCheckin(personId, dateStr, room){
+  const bArr=getBookings(dateStr,room);
+  const person=bArr.find(x=>x.id===personId);
+  if(!person)return;
+  const newVal=!person.checked_in;
+  // Update all booking_date records for this person in this stay
+  const {data}=await sb.from('bookings').select('id').eq('room',room).eq('name',person.name)
+    .gte('booking_date',person.checkin||dateStr).lte('booking_date',person.checkout||dateStr);
+  await sb.from('bookings').update({checked_in:newVal}).in('id',(data||[]).map(r=>r.id));
+  // Update local cache
+  Object.keys(bookings).forEach(key=>{
+    (bookings[key]||[]).forEach(entry=>{
+      if(entry.name===person.name&&entry.room===room)entry.checked_in=newVal;
+    });
+  });
+  showToast(newVal?`${person.name} checked in!`:`${person.name} check-in undone`);
+  // Check if ALL are now checked in — show celebration message
+  const updatedArr=getBookings(dateStr,room);
+  const allIn=updatedArr.every(x=>x.checked_in);
+  if(allIn&&newVal){
+    showToast(`All ${updatedArr.length} members checked in! Cashbook updated.`);
+  }
+  // Save scroll position before re-rendering
+  const gc=document.getElementById('grid-container');
+  window._savedScrollX=gc?gc.scrollLeft:0;
+  window._savedScrollY=gc?gc.scrollTop:0;
+  renderView();
+  // Reopen the modal to show updated state
+  setTimeout(()=>openGroupCheckinModal(dateStr,room),150);
+}
+
+// ── EDIT GROUP MODAL ──────────────────────────────────────
+function openEditGroupModal(dateStr, room){
+  const bArr=getBookings(dateStr,room);
+  if(!bArr.length)return;
+  const b=bArr[0];
+
+  const memberRows=bArr.map((person,i)=>`
+    <div class="group-name-row" data-id="${person.id}" style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;">
+      <input type="text" class="group-edit-name-input form-input" value="${person.name}" placeholder="First & Last Name" style="font-size:13px;" />
+      <button class="group-name-remove" onclick="markGroupPersonDeleted(this)" title="Remove person" style="${person.checked_in?'opacity:.4;cursor:not-allowed;':''}" ${person.checked_in?'disabled title="Cannot remove — already checked in"':''}>✕</button>
+    </div>`).join('');
+
+  document.getElementById('modal-container').innerHTML=`
+    <div class="modal-backdrop" onclick="if(event.target===this)closeModal()">
+      <div class="modal" style="max-width:500px;">
+        <div class="modal-header overflow-header">
+          <div>
+            <div class="modal-title" style="display:flex;align-items:center;gap:8px;"><i class="ti ti-users" style="color:var(--overflow-text)"></i> Edit Group</div>
+            <div class="modal-subtitle">${room} · ${bArr.length} members</div>
+          </div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
+            <span>Group Members</span>
+            <span style="font-size:11px;font-weight:400;">Checked-in members cannot be removed</span>
+          </div>
+          <div id="edit-group-list" style="display:flex;flex-direction:column;gap:6px;">${memberRows}</div>
+          <button onclick="addEditGroupRow()" style="width:100%;margin-top:8px;padding:8px;background:var(--overflow-bg);border:1px dashed var(--overflow-border);border-radius:7px;font-family:var(--font);font-size:12px;font-weight:600;color:var(--overflow-text);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;"><i class="ti ti-plus"></i> Add Person</button>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn-primary" id="edit-group-save-btn" onclick="saveEditedGroup('${dateStr}','${room}')" style="background:var(--overflow-border);"><i class="ti ti-check"></i> Save Changes</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function markGroupPersonDeleted(btn){
+  const row=btn.closest('.group-name-row');
+  if(!row)return;
+  if(btn.getAttribute('data-deleted')==='true'){
+    // Undo
+    btn.setAttribute('data-deleted','false');
+    btn.textContent='✕';
+    row.style.opacity='1';
+    const inp=row.querySelector('input');
+    if(inp)inp.disabled=false;
+  } else {
+    // Mark for deletion
+    btn.setAttribute('data-deleted','true');
+    btn.textContent='↩';
+    btn.title='Click to undo';
+    row.style.opacity='0.4';
+    const inp=row.querySelector('input');
+    if(inp)inp.disabled=true;
+  }
+}
+
+function addEditGroupRow(){
+  const list=document.getElementById('edit-group-list');
+  if(!list)return;
+  const row=document.createElement('div');
+  row.className='group-name-row';
+  row.dataset.id='new';
+  row.style.cssText='display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;';
+  row.innerHTML=`<input type="text" class="group-edit-name-input form-input" placeholder="New Person — First & Last Name" style="font-size:13px;" /><button class="group-name-remove" onclick="this.closest('.group-name-row').remove()" title="Remove">✕</button>`;
+  list.appendChild(row);
+  row.querySelector('input').focus();
+}
+
+async function saveEditedGroup(dateStr, room){
+  const bArr=getBookings(dateStr,room);
+  const b=bArr[0];
+  const btn=document.getElementById('edit-group-save-btn');
+  btn.disabled=true;btn.textContent='Saving...';
+
+  const rows=[...document.querySelectorAll('#edit-group-list .group-name-row')];
+
+  // Delete removed people
+  const deletedIds=rows
+    .filter(r=>r.querySelector('button[data-deleted="true"]')&&r.dataset.id!=='new')
+    .map(r=>r.dataset.id);
+
+  if(deletedIds.length){
+    // Get all booking_date records for these people
+    for(const pid of deletedIds){
+      const person=bArr.find(x=>x.id===pid);
+      if(!person)continue;
+      const {data}=await sb.from('bookings').select('id').eq('room',room).eq('name',person.name)
+        .gte('booking_date',person.checkin||dateStr).lte('booking_date',person.checkout||dateStr);
+      await deleteBookingFromDB((data||[]).map(r=>r.id));
+    }
+  }
+
+  // Rename changed people
+  for(const row of rows){
+    if(row.querySelector('button[data-deleted="true"]'))continue;
+    if(row.dataset.id==='new')continue;
+    const person=bArr.find(x=>x.id===row.dataset.id);
+    if(!person)continue;
+    const newName=row.querySelector('input').value.trim().toUpperCase();
+    if(newName&&newName!==person.name){
+      const {data}=await sb.from('bookings').select('id').eq('room',room).eq('name',person.name)
+        .gte('booking_date',person.checkin||dateStr).lte('booking_date',person.checkout||dateStr);
+      await sb.from('bookings').update({name:newName}).in('id',(data||[]).map(r=>r.id));
+    }
+  }
+
+  // Add new people
+  const newRows=rows.filter(r=>r.dataset.id==='new'&&!r.querySelector('button[data-deleted="true"]'));
+  if(newRows.length){
+    const newRecords=[];
+    for(const row of newRows){
+      const newName=row.querySelector('input').value.trim().toUpperCase();
+      if(!newName)continue;
+      const start=parseDate(b.checkin||dateStr);
+      const end=b.checkout?parseDate(b.checkout):start;
+      let cur=new Date(start);
+      while(cur<=end&&(!b.checkout||cur<end)){
+        newRecords.push({
+          name:newName,company:b.company,agency:b.agency,invoice:b.invoice,
+          voucher:b.voucher,notes:b.notes,paid:b.paid,dirty:false,
+          checkin:b.checkin,checkout:b.checkout,overflow:true,room,
+          guesthouse:b.guesthouse,gh_cost:b.gh_cost,owed_paid:b.owed_paid,
+          meal_breakfast:b.meal_breakfast,meal_lunch:b.meal_lunch,meal_dinner:b.meal_dinner,
+          breakfast_eaten:false,checked_in:false,
+          booking_date:dateKey(new Date(cur)),
+        });
+        cur.setDate(cur.getDate()+1);
+      }
+    }
+    if(newRecords.length){
+      const {error}=await sb.from('bookings').insert(newRecords);
+      if(error){showToast('Error adding new members: '+error.message,'error');}
+    }
+  }
+
+  showToast('Group updated!');
+  closeModal();
+  await loadAndRender();
+  setTimeout(()=>openGroupDetailModal(dateStr,room),300);
 }
 function closeModal(){document.getElementById('modal-container').innerHTML='';}
 
@@ -4993,7 +5360,7 @@ async function loadAndRenderCashbookEntries(fromDate, toDate){
 
   // Fetch meal bookings (debits)
   const {data:bookingData,error:bErr}=await sb.from('bookings')
-    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,checked_in')
+    .select('id,name,invoice,checkin,checkout,meal_breakfast,meal_lunch,meal_dinner,checked_in,breakfast_eaten,room')
     .gte('checkin',fromDate).lte('checkin',toDate)
     .order('checkin',{ascending:true});
 
@@ -5007,15 +5374,16 @@ async function loadAndRenderCashbookEntries(fromDate, toDate){
     .select('*').gte('fund_date',fromDate).lte('fund_date',toDate)
     .order('fund_date',{ascending:true});
 
-  // Build meal entries (one per unique guest stay)
+  // One line per person — each person's amount based on their individual breakfast choice
   const seen=new Set();
   const debits=[];
   (bookingData||[]).forEach(b=>{
-    const key=`${b.name}__${b.checkin}`;
+    const key=`${b.name}__${b.checkin}__${b.room}`;
+    if(seen.has(key)||!b.checked_in)return;
+    seen.add(key);
     const bfAmt=b.breakfast_eaten?0:(parseFloat(b.meal_breakfast)||0);
     const daily=bfAmt+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0);
-    if(!seen.has(key)&&daily>0&&b.checked_in){
-      seen.add(key);
+    if(daily>0){
       const nights=b.checkin&&b.checkout?Math.max(Math.round((new Date(b.checkout)-new Date(b.checkin))/(1000*60*60*24)),1):1;
       debits.push({date:b.checkin,type:'debit',desc:`${b.invoice||'—'} — ${b.name}`,amount:daily*nights,nights});
     }
