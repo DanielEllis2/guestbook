@@ -562,6 +562,7 @@ input,select,textarea{font-size:16px;}
         <button class="mobile-nav-link" id="mnav-agencies" onclick="closeMobileNav();setView('agencies')"><i class="ti ti-briefcase"></i> Agencies</button>
         <button class="mobile-nav-link" id="mnav-guesthouses" onclick="closeMobileNav();setView('guesthouses')"><i class="ti ti-home"></i> Guesthouses</button>
         <button class="mobile-nav-link" id="mnav-cashbook" onclick="closeMobileNav();setView('cashbook')"><i class="ti ti-book"></i> Cashbook</button>
+        <button class="mobile-nav-link" id="mnav-workers" onclick="closeMobileNav();setView('workers')"><i class="ti ti-users"></i> Workers</button>
         <button class="mobile-nav-link" id="mnav-remittances" onclick="closeMobileNav();setView('remittances')"><i class="ti ti-file-invoice"></i> Remittances</button>
         <div class="mobile-nav-divider"></div>
         <button class="mobile-nav-link" onclick="closeMobileNav();toggleDarkMode()"><i class="ti ti-moon" id="mnav-theme-icon"></i> <span id="mnav-theme-label">Toggle Dark Mode</span></button>
@@ -585,6 +586,8 @@ input,select,textarea{font-size:16px;}
       <button class="nav-btn" id="btn-agencies" onclick="setView('agencies')"><i class="ti ti-briefcase" style="font-size:13px;vertical-align:-1px"></i> Agencies</button>
       <button class="nav-btn" id="btn-guesthouses" onclick="setView('guesthouses')"><i class="ti ti-home" style="font-size:13px;vertical-align:-1px"></i> Guesthouses</button>
       <button class="nav-btn" id="btn-remittances" onclick="setView('remittances')"><i class="ti ti-file-invoice" style="font-size:13px;vertical-align:-1px"></i> Remittances</button>
+      <button class="nav-btn" id="btn-cashbook" onclick="setView('cashbook')"><i class="ti ti-book" style="font-size:13px;vertical-align:-1px"></i> Cashbook</button>
+      <button class="nav-btn" id="btn-workers" onclick="setView('workers')"><i class="ti ti-users-group" style="font-size:13px;vertical-align:-1px"></i> Workers</button>
     </div>
     <div class="header-nav">
       <button class="icon-btn" onclick="navigate(-1)"><i class="ti ti-chevron-left"></i></button>
@@ -748,7 +751,7 @@ const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const FULLDAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-let currentView='week', currentDate=new Date(), bookings={}, searchTerm='', companies=[], agencies=[], clients=[], guesthouses=[];
+let currentView='week', currentDate=new Date(), bookings={}, searchTerm='', companies=[], agencies=[], clients=[], guesthouses=[], workers=[];
 let _appStarted=false;
 
 // ── HELPERS ──────────────────────────────────────────────
@@ -988,7 +991,7 @@ async function deleteBookingFromDB(ids){
 // ── NAVIGATION ────────────────────────────────────────────
 function setView(v){
   currentView=v;
-  ['week','month','clients','companies','agencies','guesthouses','remittances','cashbook'].forEach(k=>{
+  ['week','month','clients','companies','agencies','guesthouses','remittances','cashbook','workers'].forEach(k=>{
     ['','2','3','4','5'].forEach(s=>{
       const el=document.getElementById(`btn-${k}${s}`);
       if(el)el.classList.toggle('active',v===k);
@@ -1001,12 +1004,14 @@ function setView(v){
   document.getElementById('guesthouses-page').classList.toggle('active',v==='guesthouses');
   const remPage=document.getElementById('remittances-page');if(remPage)remPage.classList.toggle('active',v==='remittances');
   const cbPage=document.getElementById('cashbook-page');if(cbPage)cbPage.classList.toggle('active',v==='cashbook');
+  const wkPage=document.getElementById('workers-page');if(wkPage)wkPage.classList.toggle('active',v==='workers');
   if(v==='companies')renderCompanies();
   else if(v==='agencies')renderAgencies();
   else if(v==='clients')renderClients();
   else if(v==='guesthouses')renderGuesthouses();
   else if(v==='remittances')renderRemittances();
   else if(v==='cashbook')renderCashbook();
+  else if(v==='workers')renderWorkersPage();
   else loadAndRender();
 }
 function navigate(dir){
@@ -2568,7 +2573,8 @@ async function printBreakfastList(){
     <tbody>${rowsHtml}</tbody>
   </table>
   <div class="footer">Aroma Guesthouse · 58 Borcherd Street, Upington</div>
-  </body></html>`);
+  
+</body></html>`);
   win.document.close();
   win.focus();
   setTimeout(()=>win.print(),400);
@@ -5632,10 +5638,346 @@ function printCashbook(){
   <table><thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Debit (Out)</th><th style="text-align:right;">Credit (In)</th><th style="text-align:right;">Balance</th></tr></thead>
   <tbody>${rowsHtml}</tbody></table>
   <div class="footer">Aroma Guesthouse · 58 Borcherd Street, Upington · bookings.aromastay.co.za</div>
-  </body></html>`);
+  
+</body></html>`);
   win.document.close();win.focus();setTimeout(()=>win.print(),400);
 }
 
+
+// ── WORKERS ───────────────────────────────────────────────
+let currentWeekendDate = new Date();
+
+async function loadWorkers(){
+  const {data,error}=await sb.from('workers').select('*').eq('active',true).order('name');
+  if(!error)workers=data||[];
+}
+
+async function renderWorkersPage(){
+  await loadWorkers();
+  renderWorkersGrid();
+  renderWeekendSchedule();
+}
+
+function renderWorkersGrid(){
+  const grid=document.getElementById('workers-grid');
+  if(!grid)return;
+  if(!workers.length){
+    grid.innerHTML=`<div class="company-add-card" onclick="openWorkerModal()"><i class="ti ti-plus" style="font-size:18px"></i> Add your first worker</div>`;
+    return;
+  }
+  let html='';
+  workers.forEach(w=>{
+    const initials=w.name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();
+    html+=`<div class="company-card">
+      <div class="company-card-top">
+        <div class="company-initials" style="background:#e0f2fe;color:#0369a1;">${initials}</div>
+        <div style="flex:1;min-width:0">
+          <div class="company-card-name">${w.name}</div>
+          ${w.role?`<div class="company-card-detail"><i class="ti ti-briefcase"></i>${w.role}</div>`:''}
+          ${w.phone?`<div class="company-card-detail"><i class="ti ti-phone"></i>${w.phone}</div>`:''}
+        </div>
+      </div>
+      <div class="company-card-actions">
+        <button class="btn-sm" onclick="openWorkerModal('${w.id}')"><i class="ti ti-edit" style="font-size:12px"></i> Edit</button>
+        <button class="btn-sm danger" onclick="deleteWorker('${w.id}','${w.name.replace(/'/g,"\'")}')"><i class="ti ti-trash" style="font-size:12px"></i> Delete</button>
+      </div>
+    </div>`;
+  });
+  html+=`<div class="company-add-card" onclick="openWorkerModal()"><i class="ti ti-plus" style="font-size:18px"></i> Add worker</div>`;
+  grid.innerHTML=html;
+}
+
+function openWorkerModal(editId=''){
+  const w=editId?workers.find(x=>x.id===editId):null;
+  document.getElementById('modal-container').innerHTML=`
+    <div class="modal-backdrop">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+          <div><div class="modal-title">${w?'Edit Worker':'New Worker'}</div></div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group full"><label class="form-label">Full Name *</label>
+            <input class="form-input" id="fw-name" placeholder="e.g. Maria Mokoena" value="${w?w.name:''}" /></div>
+          <div class="form-group full"><label class="form-label">Role</label>
+            <input class="form-input" id="fw-role" placeholder="e.g. Housekeeper, Cook" value="${w&&w.role?w.role:''}" /></div>
+          <div class="form-group full"><label class="form-label">Phone</label>
+            <input class="form-input" id="fw-phone" placeholder="082 123 4567" value="${w&&w.phone?w.phone:''}" /></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn-primary" id="fw-save" onclick="saveWorker('${editId||''}')">Save Worker</button>
+        </div>
+      </div>
+    </div>`;
+  setTimeout(()=>document.getElementById('fw-name').focus(),50);
+}
+
+async function saveWorker(editId){
+  const name=uc(document.getElementById('fw-name').value.trim());
+  if(!name){showToast('Please enter worker name','error');return;}
+  const btn=document.getElementById('fw-save');
+  btn.disabled=true;btn.textContent='Saving...';
+  const payload={name,role:document.getElementById('fw-role').value.trim()||null,phone:document.getElementById('fw-phone').value.trim()||null};
+  let error;
+  if(editId){({error}=await sb.from('workers').update(payload).eq('id',editId));}
+  else{({error}=await sb.from('workers').insert(payload));}
+  if(error){showToast('Error: '+error.message,'error');btn.disabled=false;btn.textContent='Save Worker';return;}
+  showToast(editId?'Worker updated!':'Worker added!');
+  closeModal();
+  await loadWorkers();
+  renderWorkersGrid();
+}
+
+async function deleteWorker(id,name){
+  if(!confirm(`Remove "${name}" from workers?`))return;
+  await sb.from('workers').update({active:false}).eq('id',id);
+  showToast('Worker removed');
+  await loadWorkers();
+  renderWorkersGrid();
+}
+
+// ── WEEKEND SCHEDULE ──────────────────────────────────────
+function getWeekendDates(d){
+  // Get Sat+Sun of the week containing d
+  const day=d.getDay();
+  const sat=new Date(d);sat.setDate(d.getDate()+(6-day));
+  const sun=new Date(sat);sun.setDate(sat.getDate()+1);
+  return [sat,sun];
+}
+
+function navigateWeekend(dir){
+  currentWeekendDate.setDate(currentWeekendDate.getDate()+dir*7);
+  renderWeekendSchedule();
+}
+
+function navigateWeekendMonth(dir){
+  currentWeekendDate.setMonth(currentWeekendDate.getMonth()+dir);
+  renderWeekendSchedule();
+}
+
+async function renderWeekendSchedule(){
+  const year=currentWeekendDate.getFullYear();
+  const month=currentWeekendDate.getMonth();
+  const dim=new Date(year,month+1,0).getDate();
+  const lbl=document.getElementById('weekend-label');
+  if(lbl)lbl.textContent=`${MONTHS[month]} ${year}`;
+
+  // Collect all Saturdays and Sundays in the month
+  const weekendDates=[];
+  for(let n=1;n<=dim;n++){
+    const d=new Date(year,month,n);
+    if(d.getDay()===6||d.getDay()===0)weekendDates.push(dateKey(d));
+  }
+
+  const {data}=await sb.from('weekend_schedule').select('*,workers(name,role)').in('schedule_date',weekendDates);
+  const scheduled=data||[];
+
+  const grid=document.getElementById('weekend-schedule-grid');
+  if(!grid)return;
+
+  // Group by weekend (Sat+Sun pairs)
+  const weekends=[];
+  for(let n=1;n<=dim;n++){
+    const d=new Date(year,month,n);
+    if(d.getDay()===6){
+      const sun=new Date(d);sun.setDate(d.getDate()+1);
+      weekends.push([d, sun.getMonth()===month?sun:null]);
+    }
+  }
+
+  let html='<div style="display:flex;flex-direction:column;gap:16px;">';
+  weekends.forEach(([sat,sun])=>{
+    html+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+      <div style="background:var(--surface2);padding:10px 16px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border);">
+        Weekend of ${sat.getDate()} ${MONTHS[sat.getMonth()].slice(0,3)} ${sat.getFullYear()}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">`;
+
+    [sat, sun].forEach((day,idx)=>{
+      if(!day){html+=`<div></div>`;return;}
+      const dStr=dateKey(day);
+      const dayName=day.getDay()===6?'Saturday':'Sunday';
+      const onDuty=scheduled.filter(s=>s.schedule_date===dStr);
+      html+=`<div style="padding:12px 16px;${idx===0?'border-right:1px solid var(--border)':''}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:13px;font-weight:600;color:var(--text);">${dayName} ${day.getDate()}</span>
+          <button onclick="openAssignWorkerModal('${dStr}')" style="padding:3px 10px;background:var(--accent);color:#fff;border:none;border-radius:5px;font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer;"><i class="ti ti-plus" style="font-size:10px"></i> Add</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;min-height:40px;">
+          ${onDuty.length?onDuty.map(s=>`
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--accent-light);border:1px solid var(--accent);border-radius:6px;">
+              <div>
+                <div style="font-size:12px;font-weight:600;color:var(--accent);">${s.workers?s.workers.name:'?'}</div>
+                ${s.workers&&s.workers.role?`<div style="font-size:10px;color:var(--muted);">${s.workers.role}</div>`:''}
+                ${s.shift&&s.shift!=='full'?`<div style="font-size:10px;color:var(--muted);">${s.shift}</div>`:''}
+                ${s.notes?`<div style="font-size:10px;color:var(--muted);">${s.notes}</div>`:''}
+              </div>
+              <button onclick="removeWorkerFromSchedule('${s.id}')" style="width:20px;height:20px;border:none;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;" title="Remove">✕</button>
+            </div>`).join('')
+          :`<div style="color:var(--muted);font-size:12px;">No one assigned</div>`}
+        </div>
+      </div>`;
+    });
+    html+=`</div></div>`;
+  });
+  html+='</div>';
+  grid.innerHTML=html;
+}
+
+function openAssignWorkerModal(dateStr){
+  if(!workers.length){showToast('Add workers first','error');return;}
+  const d=parseDate(dateStr);
+  const dayName=`${FULLDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  const workerCheckboxes=workers.map(w=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);transition:all .12s;" 
+           onmouseover="this.style.borderColor='var(--accent)'" onmouseout="if(!this.querySelector('input').checked)this.style.borderColor='var(--border)'"
+           onclick="this.style.borderColor=this.querySelector('input').checked?'var(--border)':'var(--accent)';this.style.background=this.querySelector('input').checked?'var(--surface)':'var(--accent-light)'">
+      <input type="checkbox" value="${w.id}" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" onchange="syncWorkerCheckStyle(this)" />
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);">${w.name}</div>
+        ${w.role?`<div style="font-size:11px;color:var(--muted);">${w.role}</div>`:''}
+      </div>
+    </label>`).join('');
+  document.getElementById('modal-container').innerHTML=`
+    <div class="modal-backdrop">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+          <div><div class="modal-title">Assign Workers</div>
+          <div class="modal-subtitle">${dayName}</div></div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group full">
+            <label class="form-label" style="margin-bottom:8px;">Select Workers</label>
+            <div style="display:flex;flex-direction:column;gap:6px;" id="fa-worker-list">${workerCheckboxes}</div>
+          </div>
+          <div class="form-group full"><label class="form-label">Shift</label>
+            <select class="form-input" id="fa-shift">
+              <option value="full">Full Day</option>
+              <option value="morning">Morning</option>
+              <option value="afternoon">Afternoon</option>
+            </select></div>
+          <div class="form-group full"><label class="form-label">Notes</label>
+            <input class="form-input" id="fa-notes" placeholder="Any special instructions..." /></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn-primary" id="fa-save" onclick="assignWorker('${dateStr}')">Assign</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function syncWorkerCheckStyle(input){
+  const label=input.closest('label');
+  if(!label)return;
+  label.style.borderColor=input.checked?'var(--accent)':'var(--border)';
+  label.style.background=input.checked?'var(--accent-light)':'var(--surface)';
+}
+
+async function assignWorker(dateStr){
+  const checked=[...document.querySelectorAll('#fa-worker-list input:checked')].map(el=>el.value);
+  if(!checked.length){showToast('Please select at least one worker','error');return;}
+  const shift=document.getElementById('fa-shift').value;
+  const notes=document.getElementById('fa-notes').value.trim()||null;
+  const btn=document.getElementById('fa-save');
+  btn.disabled=true;btn.textContent='Saving...';
+  // Add to both Saturday and Sunday of the same weekend
+  const d=parseDate(dateStr);
+  const isSat=d.getDay()===6;
+  const sat=isSat?d:new Date(d);if(!isSat)sat.setDate(d.getDate()-1);
+  const sun=new Date(sat);sun.setDate(sat.getDate()+1);
+  const dates=[dateKey(sat),dateKey(sun)];
+  const records=[];
+  dates.forEach(date=>{
+    checked.forEach(workerId=>{
+      records.push({worker_id:workerId,schedule_date:date,shift,notes});
+    });
+  });
+  const {error}=await sb.from('weekend_schedule').insert(records);
+  if(error){showToast('Error: '+error.message,'error');btn.disabled=false;btn.textContent='Assign';return;}
+  showToast(`${checked.length} worker${checked.length!==1?'s':''} assigned to Saturday & Sunday!`);
+  closeModal();
+  renderWeekendSchedule();
+}
+
+async function removeWorkerFromSchedule(id){
+  await sb.from('weekend_schedule').delete().eq('id',id);
+  showToast('Removed from schedule');
+  renderWeekendSchedule();
+}
+
+async function printWeekendSchedule(){
+  const year=currentWeekendDate.getFullYear();
+  const month=currentWeekendDate.getMonth();
+  const label=document.getElementById('weekend-label').textContent||'';
+  const dim=new Date(year,month+1,0).getDate();
+
+  // Collect all weekend dates in month
+  const weekendDates=[];
+  for(let n=1;n<=dim;n++){
+    const d=new Date(year,month,n);
+    if(d.getDay()===6||d.getDay()===0)weekendDates.push(dateKey(d));
+  }
+
+  const {data}=await sb.from('weekend_schedule').select('*,workers(name,role)').in('schedule_date',weekendDates).order('schedule_date');
+  const scheduled=data||[];
+
+  // Build weekend pairs
+  const weekends=[];
+  for(let n=1;n<=dim;n++){
+    const d=new Date(year,month,n);
+    if(d.getDay()===6){
+      const sun=new Date(d);sun.setDate(d.getDate()+1);
+      weekends.push([d, sun.getMonth()===month?sun:null]);
+    }
+  }
+
+  let bodyHtml='';
+  weekends.forEach(([sat,sun])=>{
+    const satStr=dateKey(sat);
+    const sunStr=sun?dateKey(sun):null;
+    const satWorkers=scheduled.filter(s=>s.schedule_date===satStr);
+    const sunWorkers=sunStr?scheduled.filter(s=>s.schedule_date===sunStr):[];
+
+    const workerRow=(list)=>list.length
+      ? list.map(s=>`<tr><td style="padding:7px 12px;border-bottom:1px solid #e2ddd4;">${s.workers?s.workers.name:'?'}</td><td style="padding:7px 12px;border-bottom:1px solid #e2ddd4;color:#7a746b;">${s.workers&&s.workers.role?s.workers.role:''}</td><td style="padding:7px 12px;border-bottom:1px solid #e2ddd4;color:#7a746b;">${s.shift&&s.shift!=='full'?s.shift:'Full Day'}</td></tr>`).join('')
+      : '<tr><td colspan="3" style="padding:7px 12px;color:#9ca3af;font-style:italic;">No workers assigned</td></tr>';
+
+    bodyHtml+=`<div style="margin-bottom:24px;border:1px solid #e2ddd4;border-radius:8px;overflow:hidden;">
+      <div style="background:#2d5a3d;color:#fff;padding:10px 16px;font-size:14px;font-weight:700;">
+        Weekend of ${sat.getDate()} ${MONTHS[sat.getMonth()].slice(0,3)} ${sat.getFullYear()}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;">
+        <div style="padding:12px;border-right:1px solid #e2ddd4;">
+          <div style="font-size:12px;font-weight:700;color:#2d5a3d;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;">Saturday ${sat.getDate()}</div>
+          <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#f0ede6;"><th style="padding:6px 12px;text-align:left;font-size:10px;color:#7a746b;text-transform:uppercase;">Name</th><th style="padding:6px 12px;text-align:left;font-size:10px;color:#7a746b;text-transform:uppercase;">Role</th><th style="padding:6px 12px;text-align:left;font-size:10px;color:#7a746b;text-transform:uppercase;">Shift</th></tr></thead>
+            <tbody>${workerRow(satWorkers)}</tbody>
+          </table>
+        </div>
+        <div style="padding:12px;">
+          <div style="font-size:12px;font-weight:700;color:#2d5a3d;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;">Sunday ${sun?sun.getDate():''}</div>
+          <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#f0ede6;"><th style="padding:6px 12px;text-align:left;font-size:10px;color:#7a746b;text-transform:uppercase;">Name</th><th style="padding:6px 12px;text-align:left;font-size:10px;color:#7a746b;text-transform:uppercase;">Role</th><th style="padding:6px 12px;text-align:left;font-size:10px;color:#7a746b;text-transform:uppercase;">Shift</th></tr></thead>
+            <tbody>${workerRow(sunWorkers)}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  });
+
+  const win=window.open('','_blank','width=700,height:600');
+  win.document.write(`<!DOCTYPE html><html><head><title>Weekend Schedule — ${label}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1a1714;padding:28px;}.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #2d5a3d;}.logo{font-size:20px;font-weight:700;color:#2d5a3d;}.footer{margin-top:24px;font-size:11px;color:#7a746b;text-align:center;border-top:1px solid #e2ddd4;padding-top:10px;}@media print{body{padding:14px;}}</style>
+  </head><body>
+  <div class="hdr"><div><div class="logo">Aroma Guesthouse</div><div style="font-size:12px;color:#7a746b;margin-top:3px;">Weekend Duty Schedule</div></div><div style="text-align:right;font-size:12px;color:#7a746b;"><strong style="display:block;font-size:14px;color:#1a1714;">${label}</strong>Printed: ${new Date().toLocaleDateString('en-ZA',{day:'2-digit',month:'long',year:'numeric'})}</div></div>
+  ${bodyHtml}
+  <div class="footer">Aroma Guesthouse · 58 Borcherd Street, Upington</div>
+  </body></html>`);
+  win.document.close();win.focus();setTimeout(()=>win.print(),400);
+}
 </script>
 
 <div id="cashbook-page" class="page">
@@ -5707,6 +6049,50 @@ function printCashbook(){
         </tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<div id="workers-page" class="page">
+  <div class="header">
+    <div class="header-brand">GuestBook <span>· Workers</span></div>
+    <div class="nav-btns">
+      <button class="nav-btn" onclick="setView('week')"><i class="ti ti-calendar-week" style="font-size:13px;vertical-align:-1px"></i> Weekly</button>
+      <button class="nav-btn" onclick="setView('month')"><i class="ti ti-calendar-month" style="font-size:13px;vertical-align:-1px"></i> Monthly</button>
+      <button class="nav-btn" onclick="setView('clients')"><i class="ti ti-users" style="font-size:13px;vertical-align:-1px"></i> Clients</button>
+      <button class="nav-btn" onclick="setView('companies')"><i class="ti ti-building" style="font-size:13px;vertical-align:-1px"></i> Companies</button>
+      <button class="nav-btn" onclick="setView('agencies')"><i class="ti ti-briefcase" style="font-size:13px;vertical-align:-1px"></i> Agencies</button>
+      <button class="nav-btn" onclick="setView('guesthouses')"><i class="ti ti-home" style="font-size:13px;vertical-align:-1px"></i> Guesthouses</button>
+      <button class="nav-btn active" onclick="setView('workers')"><i class="ti ti-users" style="font-size:13px;vertical-align:-1px"></i> Workers</button>
+    </div>
+    <div style="flex:1"></div>
+    <button class="add-btn" onclick="openWorkerModal()"><i class="ti ti-plus"></i> Add Worker</button>
+  </div>
+  <div class="page-body" style="max-width:1100px;">
+
+    <!-- WORKERS LIST -->
+    <div class="page-title" style="margin-bottom:4px;">Workers</div>
+    <div class="page-subtitle" style="margin-bottom:16px;">Manage your staff and weekend duty schedule</div>
+    <div class="companies-grid" id="workers-grid" style="margin-bottom:32px;">
+      <div style="display:flex;align-items:center;gap:10px;color:var(--muted);padding:20px"><div class="loader-spinner"></div> Loading...</div>
+    </div>
+
+    <!-- WEEKEND SCHEDULE -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div class="page-title" style="font-size:17px;">Weekend Schedule</div>
+        <div class="page-subtitle">Full month — click any day to assign workers</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="icon-btn" onclick="navigateWeekendMonth(-1)"><i class="ti ti-chevron-left"></i></button>
+        <div class="period-label" id="weekend-label" style="min-width:160px;text-align:center;"></div>
+        <button class="icon-btn" onclick="navigateWeekendMonth(1)"><i class="ti ti-chevron-right"></i></button>
+        <button class="add-btn" onclick="printWeekendSchedule()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);"><i class="ti ti-printer"></i> Print</button>
+      </div>
+    </div>
+    <div id="weekend-schedule-grid">
+      <div style="display:flex;align-items:center;gap:10px;color:var(--muted);padding:20px"><div class="loader-spinner"></div> Loading...</div>
+    </div>
+
   </div>
 </div>
 </body>
