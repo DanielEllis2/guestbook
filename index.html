@@ -2085,6 +2085,32 @@ function calcGroupMealTotal(){
     display.style.display='none';
   }
 }
+
+function toggleBreakfastEaten(){
+  const ticked=document.getElementById('f-breakfast-eaten').checked;
+  const field=document.getElementById('f-meal-breakfast');
+  if(!field)return;
+  if(ticked){
+    // Save current value then set to 0
+    window._savedBreakfastAmount=field.value;
+    field.value='0';
+    field.disabled=true;
+    field.style.opacity='0.4';
+  } else {
+    // Restore saved value — fall back to company default if nothing was saved
+    let restoreVal=window._savedBreakfastAmount;
+    if(!restoreVal||restoreVal==='0'){
+      // Look up company default breakfast rate
+      const companyName=(document.getElementById('f-company')||{}).value||'';
+      const comp=companies.find(c=>c.name===companyName);
+      if(comp&&comp.meal_breakfast)restoreVal=comp.meal_breakfast;
+    }
+    field.value=restoreVal||'';
+    field.disabled=false;
+    field.style.opacity='1';
+  }
+  calcMealTotal();
+}
 function closeModal(){document.getElementById('modal-container').innerHTML='';}
 
 // ── ADD / EDIT MODAL ──────────────────────────────────────
@@ -2194,7 +2220,16 @@ function openAddModal(dateStr,room,ovf){
   <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
     <div style="font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="ti ti-tools-kitchen-2" style="font-size:13px"></i> Meal Allowances (R per day)</div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Breakfast (R)</label><input class="form-input" id="f-meal-breakfast" type="number" placeholder="0.00" oninput="calcMealTotal()" /></div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Breakfast (R)</span>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-weight:400;font-size:11px;color:var(--muted);">
+            <input type="checkbox" id="f-breakfast-eaten" onchange="toggleBreakfastEaten()" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;" />
+            Ate physically
+          </label>
+        </label>
+        <input class="form-input" id="f-meal-breakfast" type="number" placeholder="0.00" oninput="calcMealTotal()" />
+      </div>
       <div class="form-group"><label class="form-label">Lunch (R)</label><input class="form-input" id="f-meal-lunch" type="number" placeholder="0.00" oninput="calcMealTotal()" /></div>
       <div class="form-group"><label class="form-label">Dinner (R)</label><input class="form-input" id="f-meal-dinner" type="number" placeholder="0.00" oninput="calcMealTotal()" /></div>
     </div>
@@ -2242,7 +2277,7 @@ function openAddModal(dateStr,room,ovf){
     <button class="btn-primary" id="save-btn" onclick="saveBooking('${dateStr||''}','${room||''}',${isOvf})">Save Booking</button>
   </div></div></div>`;
   document.getElementById('modal-container').innerHTML=html;
-  window._paid=false;window._dirty=false;window._cash=false;window._owedPaid=true;window._editingVoucher=null;
+  window._paid=false;window._dirty=false;window._cash=false;window._owedPaid=true;window._editingVoucher=null;window._editingCheckedIn=false;
   window._pdfFiles={invoice:null,voucher:null,aroma:null};
   window._clearInvoicePdf=false;window._clearVoucherPdf=false;window._clearAromaPdf=false;
   window._existingInvoicePdfUrl=null;window._existingVoucherPdfUrl=null;window._existingAromaPdfUrl=null;
@@ -2388,8 +2423,9 @@ async function saveBooking(defDate,defRoom,isOvf){
     voucher:uc(voucher)||null,
     notes:uc(document.getElementById('f-notes').value.trim()),
     cell:document.getElementById('f-cell').value.trim()||null,
-    checked_in:false,
-    meal_breakfast:parseFloat(document.getElementById('f-meal-breakfast').value)||null,
+    checked_in:window._editingCheckedIn||false,
+    meal_breakfast:document.getElementById('f-breakfast-eaten')&&document.getElementById('f-breakfast-eaten').checked?0:(parseFloat(document.getElementById('f-meal-breakfast').value)||null),
+    breakfast_eaten:!!(document.getElementById('f-breakfast-eaten')&&document.getElementById('f-breakfast-eaten').checked),
     meal_lunch:parseFloat(document.getElementById('f-meal-lunch').value)||null,
     meal_dinner:parseFloat(document.getElementById('f-meal-dinner').value)||null,
     paid:window._paid!==false,dirty:false,cash_payment:!!window._cash,
@@ -2808,13 +2844,20 @@ function editBooking(dateStr,room){
     document.getElementById('f-notes').value=b.notes||'';
     document.getElementById('f-cell').value=b.cell||'';
     document.getElementById('f-meal-breakfast').value=b.meal_breakfast||'';
+    if(b.breakfast_eaten){
+      const tick=document.getElementById('f-breakfast-eaten');
+      const field=document.getElementById('f-meal-breakfast');
+      if(tick){tick.checked=true;}
+      if(field){field.value='0';field.disabled=true;field.style.opacity='0.4';}
+      window._savedBreakfastAmount=b.meal_breakfast||'';
+    }
     document.getElementById('f-meal-lunch').value=b.meal_lunch||'';
     document.getElementById('f-meal-dinner').value=b.meal_dinner||'';
     calcMealTotal();
     document.getElementById('f-checkin').value=b.checkin||dateStr;
     document.getElementById('f-checkout').value=b.checkout||'';
     document.getElementById('f-room').value=room;
-    window._paid=b.paid!==false;window._dirty=false;window._cash=!!b.cash_payment;
+    window._paid=b.paid!==false;window._dirty=false;window._cash=!!b.cash_payment;window._editingCheckedIn=!!b.checked_in;
     window._editingVoucher=b.voucher||null;
     window._pdfFiles={invoice:null,voucher:null,aroma:null};
     window._clearInvoicePdf=false;window._clearVoucherPdf=false;
@@ -4969,7 +5012,8 @@ async function loadAndRenderCashbookEntries(fromDate, toDate){
   const debits=[];
   (bookingData||[]).forEach(b=>{
     const key=`${b.name}__${b.checkin}`;
-    const daily=(parseFloat(b.meal_breakfast)||0)+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0);
+    const bfAmt=b.breakfast_eaten?0:(parseFloat(b.meal_breakfast)||0);
+    const daily=bfAmt+(parseFloat(b.meal_lunch)||0)+(parseFloat(b.meal_dinner)||0);
     if(!seen.has(key)&&daily>0&&b.checked_in){
       seen.add(key);
       const nights=b.checkin&&b.checkout?Math.max(Math.round((new Date(b.checkout)-new Date(b.checkin))/(1000*60*60*24)),1):1;
