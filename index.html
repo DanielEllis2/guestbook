@@ -6348,6 +6348,13 @@ async function saveWeekendWorkers(){
 
 function addWeekendHours(dateStr,workerId,workerName){
   const w=workers.find(x=>x.id===workerId);
+  const d=parseDate(dateStr);
+  const dow=d?d.getDay():null;
+  const isPH=d?!!getSAPublicHoliday(d):false;
+  const multiplier=isPH?2:(dow===0?2:1.5);
+  const multiplierLabel=isPH?'2× (Public Holiday)':(dow===0?'2× (Sunday)':'1.5× (Saturday)');
+  const rate=w&&w.hourly_rate?parseFloat(w.hourly_rate):0;
+  const initHrs=9; const initPay=rate>0?(initHrs*rate*multiplier).toFixed(2):'';
   document.getElementById('modal-container').innerHTML=`
     <div class="modal-backdrop">
       <div class="modal" style="max-width:360px;">
@@ -6357,11 +6364,24 @@ function addWeekendHours(dateStr,workerId,workerName){
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div class="form-group full"><label class="form-label">Hours Worked</label>
-            <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" placeholder="e.g. 8" autofocus />
-            ${w&&w.hourly_rate?`<div style="font-size:11px;color:var(--accent);margin-top:3px;">R ${parseFloat(w.hourly_rate).toFixed(2)}/hr</div>`:''}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group full"><label class="form-label">Start Time</label>
+              <input class="form-input" id="wh-start" type="time" value="06:00" autofocus onchange="calcWeekendPayFromTime(${rate},${multiplier})" />
+            </div>
+            <div class="form-group full"><label class="form-label">End Time</label>
+              <input class="form-input" id="wh-end" type="time" value="15:00" onchange="calcWeekendPayFromTime(${rate},${multiplier})" />
+            </div>
           </div>
-          <div class="form-group full"><label class="form-label">Notes</label>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <span id="wh-hrs-display" style="font-size:20px;font-weight:800;color:var(--text);">${initHrs}</span>
+              <span style="font-size:12px;color:var(--muted);margin-left:4px;">hrs</span>
+              ${rate>0?`<div style="font-size:11px;color:var(--muted);margin-top:1px;">R ${rate.toFixed(2)}/hr · ${multiplierLabel}</div>`:''}
+            </div>
+            ${rate>0?`<div id="wh-calc" style="font-size:20px;font-weight:800;color:var(--accent);">R ${initPay}</div>`:''}
+          </div>
+          <input type="hidden" id="wh-hrs" value="${initHrs}" />
+          <div class="form-group full" style="margin-top:10px;"><label class="form-label">Notes</label>
             <input class="form-input" id="wh-notes" placeholder="Optional..." /></div>
         </div>
         <div class="modal-footer">
@@ -6370,7 +6390,7 @@ function addWeekendHours(dateStr,workerId,workerName){
         </div>
       </div>
     </div>`;
-  setTimeout(()=>{ const el=document.getElementById('wh-hrs'); if(el)el.focus(); },50);
+  setTimeout(()=>{ const el=document.getElementById('wh-start'); if(el)el.focus(); },50);
 }
 
 async function saveWeekendHours(dateStr,workerId){
@@ -6388,6 +6408,17 @@ async function saveWeekendHours(dateStr,workerId){
 function editWeekendHours(entryId,dateStr,workerId,workerName,currentHrs){
   const w=workers.find(x=>x.id===workerId);
   const isPending=!currentHrs||currentHrs===0;
+  const d=parseDate(dateStr);
+  const dow=d?d.getDay():null;
+  const isPH=d?!!getSAPublicHoliday(d):false;
+  const multiplier=isPH?2:(dow===0?2:1.5);
+  const multiplierLabel=isPH?'2× (Public Holiday)':(dow===0?'2× (Sunday)':'1.5× (Saturday)');
+  const rate=w&&w.hourly_rate?parseFloat(w.hourly_rate):0;
+  // Convert existing hours back to a default end time (start fixed at 06:00)
+  const existingHrs=isPending?9:parseFloat(currentHrs)||9;
+  const endH=6+existingHrs; const endHH=String(Math.floor(endH)).padStart(2,'0'); const endMM=String(Math.round((endH%1)*60)).padStart(2,'0');
+  const endVal=`${endHH}:${endMM}`;
+  const initPay=rate>0?(existingHrs*rate*multiplier).toFixed(2):'';
   document.getElementById('modal-container').innerHTML=`
     <div class="modal-backdrop">
       <div class="modal" style="max-width:360px;">
@@ -6397,10 +6428,23 @@ function editWeekendHours(entryId,dateStr,workerId,workerName,currentHrs){
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div class="form-group full"><label class="form-label">Hours Worked</label>
-            <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" value="${isPending?'':currentHrs}" placeholder="e.g. 6" />
-            ${w&&w.hourly_rate?`<div style="font-size:11px;color:var(--accent);margin-top:3px;">R ${parseFloat(w.hourly_rate).toFixed(2)}/hr</div>`:''}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group full"><label class="form-label">Start Time</label>
+              <input class="form-input" id="wh-start" type="time" value="06:00" onchange="calcWeekendPayFromTime(${rate},${multiplier})" />
+            </div>
+            <div class="form-group full"><label class="form-label">End Time</label>
+              <input class="form-input" id="wh-end" type="time" value="${endVal}" onchange="calcWeekendPayFromTime(${rate},${multiplier})" />
+            </div>
           </div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <span id="wh-hrs-display" style="font-size:20px;font-weight:800;color:var(--text);">${existingHrs}</span>
+              <span style="font-size:12px;color:var(--muted);margin-left:4px;">hrs</span>
+              ${rate>0?`<div style="font-size:11px;color:var(--muted);margin-top:1px;">R ${rate.toFixed(2)}/hr · ${multiplierLabel}</div>`:''}
+            </div>
+            ${rate>0?`<div id="wh-calc" style="font-size:20px;font-weight:800;color:var(--accent);">${initPay?'R '+initPay:''}</div>`:''}
+          </div>
+          <input type="hidden" id="wh-hrs" value="${existingHrs}" />
         </div>
         <div class="modal-footer">
           <button class="btn-danger" onclick="deleteWeekendHours('${entryId}')"><i class="ti ti-trash"></i> Remove</button>
@@ -6409,7 +6453,31 @@ function editWeekendHours(entryId,dateStr,workerId,workerName,currentHrs){
         </div>
       </div>
     </div>`;
-  setTimeout(()=>{ const el=document.getElementById('wh-hrs'); if(el){el.focus();if(!isPending)el.select();} },50);
+  setTimeout(()=>{ const el=document.getElementById('wh-start'); if(el)el.focus(); },50);
+}
+
+function calcWeekendPayFromTime(rate,multiplier){
+  const startEl=document.getElementById('wh-start');
+  const endEl=document.getElementById('wh-end');
+  const hrsEl=document.getElementById('wh-hrs');
+  const hrsDisp=document.getElementById('wh-hrs-display');
+  const calcEl=document.getElementById('wh-calc');
+  if(!startEl||!endEl)return;
+  const [sh,sm]=startEl.value.split(':').map(Number);
+  const [eh,em]=endEl.value.split(':').map(Number);
+  let mins=(eh*60+em)-(sh*60+sm);
+  if(mins<0)mins+=24*60; // overnight shift
+  const hrs=Math.round(mins/60*10)/10; // round to 1 decimal
+  if(hrsEl)hrsEl.value=hrs>0?hrs:'';
+  if(hrsDisp)hrsDisp.textContent=hrs>0?hrs:'0';
+  if(calcEl&&rate)calcEl.textContent=hrs>0?'R '+(hrs*rate*multiplier).toFixed(2):'';
+}
+
+function calcWeekendPay(rate,multiplier){
+  const el=document.getElementById('wh-calc');
+  if(!el||!rate)return;
+  const hrs=parseFloat(document.getElementById('wh-hrs').value)||0;
+  el.textContent=hrs>0?'R '+(hrs*rate*multiplier).toFixed(2):'';
 }
 
 async function updateWeekendHours(entryId){
