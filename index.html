@@ -22,6 +22,7 @@
   --dirty:#fff3cd;--dirty-text:#856404;
   --unpaid:#fde8e8;--unpaid-text:#9b1c1c;
   --overflow-bg:#ede9fe;--overflow-border:#7c3aed;--overflow-text:#3b1fa8;--overflow-head:#f3f0ff;
+  --noshow-bg:#f1f5f9;--noshow-border:#94a3b8;--noshow-text:#475569;
   --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
   --shadow:0 1px 3px rgba(0,0,0,.08);
 }
@@ -32,6 +33,7 @@ body.dark{
   --dirty:#422006;--dirty-text:#fde68a;
   --unpaid:#450a0a;--unpaid-text:#fca5a5;
   --overflow-bg:#2e1065;--overflow-border:#a78bfa;--overflow-text:#c4b5fd;--overflow-head:#1e1b4b;
+  --noshow-bg:#1e293b;--noshow-border:#64748b;--noshow-text:#94a3b8;
   --shadow:0 1px 3px rgba(0,0,0,.4);
 }
 /* Dark mode check-in colour overrides */
@@ -167,7 +169,29 @@ body.dark .month-date-label.ph-day{background:#422006;border-left-color:#f59e0b;
 .cell.overflow-cell{background:var(--overflow-bg);border-color:var(--overflow-border);}
 .cell.overflow-cell:hover{border-color:var(--overflow-text);}
 .cell.overflow-cell.unpaid{background:linear-gradient(135deg,var(--overflow-bg) 60%,var(--unpaid) 100%);}
-.cell-content{padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden;}
+/* No Show columns */
+.room-head.noshow-head{color:#475569;background:#f1f5f9;border-radius:4px;}
+body.dark .room-head.noshow-head{color:#94a3b8;background:#1e293b;}
+.month-room-head.noshow-head{color:#475569;background:#f1f5f9;border-radius:3px;}
+body.dark .month-room-head.noshow-head{color:#94a3b8;background:#1e293b;}
+.cell.noshow-col{background:#f8fafc;border-color:#cbd5e1;border-left:3px solid #94a3b8;}
+.cell.noshow-col .cell-name{color:#334155;text-decoration:line-through;opacity:.8;}
+.cell.noshow-col .cell-company{color:#64748b;font-size:11px;}
+.cell.noshow-col-empty{background:#f8fafc;border:1px dashed #cbd5e1;opacity:.6;}
+.mcell.noshow-col{background:#f1f5f9;border-color:#94a3b8;}
+.mcell.noshow-col-empty{background:#f8fafc;border:1px dashed #cbd5e1;opacity:.4;}
+body.dark .cell.noshow-col{background:#1e293b;border-color:#475569;}
+body.dark .cell.noshow-col-empty{background:#1e293b;border-color:#475569;}
+/* Separator before No Show columns */
+.noshow-sep{border-left:3px solid #94a3b8!important;}
+.cell.no-show{background:var(--noshow-bg);border-color:var(--noshow-border);border-left:3px solid var(--noshow-border);opacity:.85;}
+.cell.no-show .cell-name{color:var(--noshow-text);text-decoration:line-through;}
+.cell.no-show .cell-company{color:var(--noshow-text);opacity:.7;}
+.tag-noshow{background:#f1f5f9;color:#475569;border:1px solid #94a3b8;}
+body.dark .tag-noshow{background:#1e293b;color:#94a3b8;border-color:#475569;}
+.btn-noshow{padding:7px 16px;background:#f1f5f9;color:#475569;border:1.5px solid #94a3b8;border-radius:6px;font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;}
+.btn-noshow:hover{background:#e2e8f0;color:#334155;border-color:#64748b;}
+.btn-noshow.active{background:#334155;color:#f8fafc;border-color:#334155;}.cell-content{padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden;}
 .cell-name{font-size:13px;font-weight:600;color:var(--occupied-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .cell.overflow-cell .cell-name{color:var(--overflow-text);}
 .cell-company{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -754,6 +778,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const MY_ROOMS = Array.from({length:20},(_,i)=>`Room ${i+1}`);
 const OVF_ROOMS = Array.from({length:10},(_,i)=>`Overflow ${i+1}`);
 const ALL_ROOMS = [...MY_ROOMS,...OVF_ROOMS];
+const NS_ROOMS = ['No Show 1','No Show 2','No Show 3'];
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const FULLDAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -765,6 +790,7 @@ let _appStarted=false;
 function dateKey(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function parseDate(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
 function isOverflow(r){return r.startsWith('Overflow');}
+function isNoShowCol(r){return r.startsWith('No Show');}
 function getWeekStart(d){const day=d.getDay();const diff=day===1?0:day===0?-6:1-day;const s=new Date(d);s.setDate(d.getDate()+diff);return s;}
 function uc(v){return v?v.toUpperCase():v;}
 function prefixIN(v){
@@ -1272,8 +1298,8 @@ function renderWeek(){
     }
   });
   // Render one th per month group spanning all its days × all rooms
-  // Each "day" maps to 25 room columns (20 + 5 overflow)
-  const totalRooms=ALL_ROOMS.length;
+  // Each "day" maps to 25 room columns (20 + 5 overflow) + 3 no-show
+  const totalRooms=ALL_ROOMS.length+NS_ROOMS.length;
   monthGroups.forEach(g=>{
     const colspan=g.count*totalRooms;
     html+=`<th colspan="${colspan}" style="text-align:left;padding:8px 12px 4px;font-size:15px;font-weight:700;color:var(--text);letter-spacing:-0.3px;border-bottom:2px solid var(--accent);background:var(--bg);">${MONTHS[g.month]} ${g.year}</th>`;
@@ -1284,6 +1310,7 @@ function renderWeek(){
   html+=`<tr><th class="room-head corner"></th>`;
   MY_ROOMS.forEach(r=>{html+=`<th class="room-head">${r}</th>`;});
   OVF_ROOMS.forEach(r=>{html+=`<th class="room-head overflow-head">${r}</th>`;});
+  NS_ROOMS.forEach((r,i)=>{html+=`<th class="room-head noshow-head${i===0?' noshow-sep':''}" title="No Show column — holds bookings marked as No Show"><i class="ti ti-user-off" style="font-size:11px;margin-right:3px;"></i>${r}</th>`;});
   html+=`</tr></thead><tbody>`;
 
   days.forEach(d=>{
@@ -1291,9 +1318,17 @@ function renderWeek(){
     const isToday=dStr===todayStr;
     const ph=getSAPublicHoliday(d);
     html+=`<tr><td class="date-col"><div class="date-label${isToday?' today':''}${ph?' ph-day':''}"><div class="dl-day">${FULLDAYS[d.getDay()]}</div><div class="dl-date">${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)}</div>${ph?`<div class="dl-ph"><i class="ti ti-flag-3" style="font-size:10px"></i> ${ph}</div>`:''}</div></td>`;
+    // Collect no-shows for this date across all rooms (for NS columns)
+    const noShowsForDay=[];
+    ALL_ROOMS.forEach(room=>{
+      const bArr=getBookings(dStr,room);
+      bArr.forEach(bx=>{if(bx.no_show)noShowsForDay.push({...bx,_origRoom:room});});
+    });
     ALL_ROOMS.forEach(room=>{
       const ovf=isOverflow(room);
-      const bArr=getBookings(dStr,room);
+      const allBArr=getBookings(dStr,room);
+      // In the regular columns, treat no-show bookings as if the cell is empty
+      const bArr=allBArr.filter(x=>!x.no_show);
       const b=bArr.length?bArr[0]:null;
       const isGroup=bArr.length>1;
       const match=isGroup?matchSearchGroup(bArr):matchSearch(b);
@@ -1347,6 +1382,29 @@ function renderWeek(){
         html+=`<td class="cell${ovf?' overflow-empty':''}" onclick="openAddModal('${dStr}','${room}',${ovf})" title="${cellTip}"><div class="cell-add">+</div></td>`;
       }
     });
+    // ── No Show columns ──────────────────────────────────────
+    NS_ROOMS.forEach((nsRoom,nsIdx)=>{
+      const ns=noShowsForDay[nsIdx]||null;
+      const sepStyle=nsIdx===0?'border-left:3px solid #94a3b8;':'';
+      if(ns){
+        const origRoomAbbr=ns._origRoom.replace('Room ','R').replace('Overflow ','OV');
+        const nsTip=`No Show — ${ns.name} | originally: ${origRoomAbbr}${ns.company?' | '+ns.company:''}${ns.invoice?' | '+ns.invoice:''}`;
+        html+=`<td class="cell noshow-col" style="position:relative;${sepStyle}" onclick="openDetailModal('${dStr}','${ns._origRoom}')" title="${nsTip}">
+          <div style="position:absolute;top:5px;right:6px;font-size:11px;color:#94a3b8;" title="No Show"><i class="ti ti-user-off"></i></div>
+          <div class="cell-content">
+            <div class="cell-name">${hl(ns.name)}</div>
+            <div class="cell-company" style="font-size:10px;color:#64748b;">${origRoomAbbr}</div>
+            <div class="cell-company" style="font-family:var(--mono);font-size:10px;color:#64748b;">${ns.invoice||'—'}</div>
+            <div class="cell-tags">
+              ${!ns.paid?'<span class="tag tag-unpaid">Liable</span>':''}
+              <span class="tag tag-noshow"><i class="ti ti-user-off" style="font-size:9px"></i> No Show</span>
+            </div>
+          </div>
+        </td>`;
+      } else {
+        html+=`<td class="cell noshow-col-empty" style="${sepStyle}" title="${nsRoom} — no shows today"></td>`;
+      }
+    });
     html+=`</tr>`;
   });
   html+=`</tbody></table>`;
@@ -1367,6 +1425,7 @@ function renderMonth(){
   let html=`<table class="month-table"><thead><tr><th class="month-room-head corner"></th>`;
   MY_ROOMS.forEach(r=>{html+=`<th class="month-room-head" title="${r}">${r.replace('Room ','R')}</th>`;});
   OVF_ROOMS.forEach(r=>{html+=`<th class="month-room-head overflow-head" title="${r}">${r.replace('Overflow ','OV')}</th>`;});
+  NS_ROOMS.forEach((r,i)=>{html+=`<th class="month-room-head noshow-head${i===0?' noshow-sep':''}" title="No Show column"><i class="ti ti-user-off" style="font-size:10px;margin-right:2px;"></i>${r.replace('No Show ','NS')}</th>`;});
   html+=`</tr></thead><tbody>`;
   for(let n=1;n<=dim;n++){
     const d=new Date(year,month,n);
@@ -1374,9 +1433,16 @@ function renderMonth(){
     const isToday=d.getFullYear()===today.getFullYear()&&d.getMonth()===today.getMonth()&&d.getDate()===today.getDate();
     const ph=getSAPublicHoliday(d);
     html+=`<tr><td class="date-col"><div class="month-date-label${isToday?' today':''}${ph?' ph-day':''}"><div class="mdl-full">${n} ${MONTHS[month].slice(0,3)}</div><div class="mdl-day">${DAYS[d.getDay()]}</div>${ph?`<div class="dl-ph" style="font-size:9px;">${ph}</div>`:''}</div></td>`;
+    // Collect no-shows for NS columns
+    const noShowsForDay=[];
+    ALL_ROOMS.forEach(room=>{
+      const bArr=getBookings(dStr,room);
+      bArr.forEach(bx=>{if(bx.no_show)noShowsForDay.push({...bx,_origRoom:room});});
+    });
     ALL_ROOMS.forEach(room=>{
       const ovf=isOverflow(room);
-      const bArr=getBookings(dStr,room);
+      const allBArr=getBookings(dStr,room);
+      const bArr=allBArr.filter(x=>!x.no_show);
       const b=bArr.length?bArr[0]:null;
       const isGroup=bArr.length>1;
       const match=isGroup?matchSearchGroup(bArr):matchSearch(b);
@@ -1396,6 +1462,18 @@ function renderMonth(){
         html+=`<td class="mcell${ovf?' overflow-cell':''}" style="opacity:.25" title="${cellTip}"></td>`;
       } else {
         html+=`<td class="mcell${ovf?' overflow-empty':''}" onclick="openAddModal('${dStr}','${room}',${ovf})" title="${cellTip}"></td>`;
+      }
+    });
+    // ── No Show columns (month view) ────────────────────────
+    NS_ROOMS.forEach((nsRoom,nsIdx)=>{
+      const ns=noShowsForDay[nsIdx]||null;
+      const sepStyle=nsIdx===0?'border-left:3px solid #94a3b8;':'';
+      if(ns){
+        const origRoomAbbr=ns._origRoom.replace('Room ','R').replace('Overflow ','OV');
+        const init=ns.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        html+=`<td class="mcell noshow-col" style="${sepStyle}" onclick="openDetailModal('${dStr}','${ns._origRoom}')" title="No Show — ${ns.name} (${origRoomAbbr})"><div class="mcell-init" style="text-decoration:line-through;color:#64748b;">${init}</div></td>`;
+      } else {
+        html+=`<td class="mcell noshow-col-empty" style="${sepStyle}" title="${nsRoom} — empty"></td>`;
       }
     });
   }
@@ -3318,6 +3396,7 @@ function openDetailModal(dateStr,room){
         ${drow('Check-in',b.checkin?formatDateStr(b.checkin):formatDateStr(dateStr))}
         ${drow('Check-out',b.checkout?formatDateStr(b.checkout):'—')}
         ${drow('Client Payment',!b.paid?'<span style="color:var(--unpaid-text);font-weight:600">Unpaid</span>':'<span style="color:var(--accent);font-weight:600">Paid</span>')}
+        ${b.no_show?drow('Booking Status','<span style="background:#f1f5f9;color:#475569;border:1px solid #94a3b8;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;"><i class="ti ti-user-off" style="font-size:11px"></i> No Show — Still Liable</span>'):''}
         ${!ovf?drow('Room Status',b.dirty?'<span style="color:var(--dirty-text);font-weight:600">Needs cleaning</span>':'<span style="color:var(--accent);font-weight:600">Clean</span>'):''}`;
   if(ovf){
     html+=`<div style="height:1px;background:var(--overflow-border);opacity:.3;margin:4px 0"></div>
@@ -3399,6 +3478,7 @@ function openDetailModal(dateStr,room){
       <button class="btn-extend" onclick="extendBooking('${dateStr}','${room}')"><i class="ti ti-arrow-bar-right"></i> Extend</button>
       <button class="btn-secondary" onclick="editBooking('${dateStr}','${room}')"><i class="ti ti-edit"></i> Edit</button>
       <button class="btn-secondary" onclick="emailInvoice('${dateStr}','${room}')" style="background:var(--accent-light);border-color:var(--accent);color:var(--accent);"><i class="ti ti-mail"></i> Email</button>
+      <button class="btn-noshow${b.no_show?' active':''}" onclick="toggleNoShowDB('${dateStr}','${room}')" title="${b.no_show?'Undo No Show — restore booking':'Mark as No Show (client still liable)'}"><i class="ti ti-user-off"></i> ${b.no_show?'Undo No Show':'No Show'}</button>
       ${ovf?`<button class="btn-primary" onclick="toggleOwedPaidDB('${dateStr}','${room}')">${b.owed_paid===false?'Mark GH Paid':'Mark GH Unpaid'}</button>`
            :`<button class="btn-primary" onclick="togglePaidDB('${dateStr}','${room}')">${!b.paid?'Mark Paid':'Mark Unpaid'}</button>`}
     </div>
@@ -3474,6 +3554,18 @@ async function togglePaidDB(dateStr,room){
   const ids=(data||[]).map(r=>r.id);
   await sb.from('bookings').update({paid:newPaid}).in('id',ids);
   showToast(newPaid?'Marked as paid':'Marked as unpaid');
+  closeModal();await loadAndRender();
+}
+
+async function toggleNoShowDB(dateStr,room){
+  const b=getBooking(dateStr,room);if(!b)return;
+  const newNoShow=!b.no_show;
+  const {data}=await sb.from('bookings').select('id').eq('room',room).eq('name',b.name).gte('booking_date',b.checkin||dateStr).lte('booking_date',b.checkout||dateStr);
+  const ids=(data||[]).map(r=>r.id);
+  // When marking no show, also clear checked_in since they never arrived
+  const update=newNoShow?{no_show:true,checked_in:false}:{no_show:false};
+  await sb.from('bookings').update(update).in('id',ids);
+  showToast(newNoShow?'Marked as No Show — client is still liable':'No Show status removed');
   closeModal();await loadAndRender();
 }
 
@@ -5940,9 +6032,10 @@ async function renderWorkerMonthlyView(){
   const endStr=`${year}-${String(month+1).padStart(2,'0')}-${String(dim).padStart(2,'0')}`;
 
   const {data:schedData}=await sb.from('weekend_schedule')
-    .select('worker_id,hours_worked,schedule_date,id,absence_type')
+    .select('worker_id,hours_worked,schedule_date,id,absence_type,notes')
     .gte('schedule_date',startStr).lte('schedule_date',endStr);
   const sched=schedData||[];
+  window._weCache={}; sched.forEach(e=>{ if(e.id) window._weCache[e.id]=e.notes||''; });
 
   const days=[];
   for(let n=1;n<=dim;n++) days.push(new Date(year,month,n));
@@ -6346,8 +6439,43 @@ async function saveWeekendWorkers(){
   openAssignWeekendModal();
 }
 
+function parseTimesFromNotes(notes){
+  if(!notes)return{start:'',end:''};
+  const m=notes.match(/^(\d{2}:\d{2})\u2013(\d{2}:\d{2})/);
+  if(m)return{start:m[1],end:m[2]};
+  const m2=notes.match(/Start: (\d{2}:\d{2})/);
+  if(m2)return{start:m2[1],end:''};
+  return{start:'',end:''};
+}
+
+function calcWeekendHours(){
+  const s=document.getElementById('wh-start').value;
+  const e=document.getElementById('wh-end').value;
+  const hrsEl=document.getElementById('wh-hrs');
+  const calcEl=document.getElementById('wh-calc');
+  if(s&&e){
+    const [sh,sm]=s.split(':').map(Number);
+    let [eh,em]=e.split(':').map(Number);
+    let diff=(eh*60+em)-(sh*60+sm);
+    if(diff<0)diff+=24*60;
+    const hrs=Math.round(diff/60*100)/100;
+    hrsEl.value=hrs>0?hrs:'';
+    if(calcEl)calcEl.textContent=hrs>0?`= ${hrs} hrs`:'';
+  } else {
+    if(calcEl)calcEl.textContent='';
+  }
+}
+
 function addWeekendHours(dateStr,workerId,workerName){
   const w=workers.find(x=>x.id===workerId);
+  const otherWorkers=workers.filter(x=>x.id!==workerId);
+  const copyRow=otherWorkers.length>0?`
+    <div class="form-group full" style="margin-top:4px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);">
+        <input type="checkbox" id="wh-copy" checked style="width:15px;height:15px;accent-color:var(--accent);" />
+        Copy hours to other workers this weekend
+      </label>
+    </div>`:'';
   document.getElementById('modal-container').innerHTML=`
     <div class="modal-backdrop">
       <div class="modal" style="max-width:360px;">
@@ -6357,12 +6485,19 @@ function addWeekendHours(dateStr,workerId,workerName){
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div class="form-group full"><label class="form-label">Hours Worked</label>
-            <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" placeholder="e.g. 8" autofocus />
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div class="form-group full" style="margin:0"><label class="form-label">Start Time</label>
+              <input class="form-input" id="wh-start" type="time" oninput="calcWeekendHours()" autofocus /></div>
+            <div class="form-group full" style="margin:0"><label class="form-label">End Time</label>
+              <input class="form-input" id="wh-end" type="time" oninput="calcWeekendHours()" /></div>
+          </div>
+          <div class="form-group full"><label class="form-label">Hours Worked <span id="wh-calc" style="font-size:11px;color:var(--accent);margin-left:6px;font-weight:600;"></span></label>
+            <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" placeholder="e.g. 8" />
             ${w&&w.hourly_rate?`<div style="font-size:11px;color:var(--accent);margin-top:3px;">R ${parseFloat(w.hourly_rate).toFixed(2)}/hr</div>`:''}
           </div>
           <div class="form-group full"><label class="form-label">Notes</label>
             <input class="form-input" id="wh-notes" placeholder="Optional..." /></div>
+          ${copyRow}
         </div>
         <div class="modal-footer">
           <button class="btn-secondary" onclick="closeModal()">Cancel</button>
@@ -6370,55 +6505,123 @@ function addWeekendHours(dateStr,workerId,workerName){
         </div>
       </div>
     </div>`;
-  setTimeout(()=>{ const el=document.getElementById('wh-hrs'); if(el)el.focus(); },50);
+  setTimeout(()=>{ const el=document.getElementById('wh-start'); if(el)el.focus(); },50);
 }
 
 async function saveWeekendHours(dateStr,workerId){
   const hrs=parseFloat(document.getElementById('wh-hrs').value)||null;
-  const notes=document.getElementById('wh-notes').value.trim()||null;
+  const startT=document.getElementById('wh-start')?.value||null;
+  const endT=document.getElementById('wh-end')?.value||null;
+  const notesInput=document.getElementById('wh-notes').value.trim();
+  const timePart=startT&&endT?`${startT}–${endT}`:startT?`Start: ${startT}`:'';
+  const notes=[timePart,notesInput].filter(Boolean).join(' · ')||null;
+  const copyOthers=document.getElementById('wh-copy')?.checked||false;
   const btn=document.getElementById('wh-save');
   btn.disabled=true;btn.textContent='Saving...';
+
+  // Save for this worker
   const {error}=await sb.from('weekend_schedule').insert({worker_id:workerId,schedule_date:dateStr,hours_worked:hrs,notes});
   if(error){showToast('Error: '+error.message,'error');btn.disabled=false;btn.textContent='Save Hours';return;}
-  showToast('Hours saved!');
+
+  // Copy to other workers on the same weekend if requested
+  if(copyOthers&&hrs){
+    // Determine the weekend's Sat+Sun dates
+    // Only copy to other workers on the same date (not the partner Sat/Sun)
+    const otherWorkerIds=workers.filter(w=>w.id!==workerId).map(w=>w.id);
+    if(otherWorkerIds.length){
+      const {data:existing}=await sb.from('weekend_schedule')
+        .select('id,worker_id,schedule_date,hours_worked')
+        .eq('schedule_date',dateStr)
+        .in('worker_id',otherWorkerIds)
+        .is('absence_type',null);
+      const existingEntries=existing||[];
+      const toUpdate=existingEntries.filter(e=>!e.hours_worked||e.hours_worked===0);
+      for(const e of toUpdate){
+        await sb.from('weekend_schedule').update({hours_worked:hrs}).eq('id',e.id);
+      }
+    }
+  }
+
+  showToast('Hours saved!'+(copyOthers&&hrs?' (copied to other workers)':''));
   closeModal();
   renderWorkerMonthlyView();
 }
 
 function editWeekendHours(entryId,dateStr,workerId,workerName,currentHrs){
+  const {start:startTime,end:endTime}=parseTimesFromNotes((window._weCache&&window._weCache[entryId])||'');
   const w=workers.find(x=>x.id===workerId);
   const isPending=!currentHrs||currentHrs===0;
+  const otherWorkers=workers.filter(x=>x.id!==workerId);
+  const copyRow=otherWorkers.length>0?`
+    <div class="form-group full" style="margin-top:4px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);">
+        <input type="checkbox" id="wh-copy" checked style="width:15px;height:15px;accent-color:var(--accent);" />
+        Copy hours to other workers this weekend
+      </label>
+    </div>`:'';
+  const rateHtml=w&&w.hourly_rate?`<div style="font-size:11px;color:var(--accent);margin-top:3px;">R ${parseFloat(w.hourly_rate).toFixed(2)}/hr</div>`:'';
   document.getElementById('modal-container').innerHTML=`
     <div class="modal-backdrop">
       <div class="modal" style="max-width:360px;">
         <div class="modal-header" style="background:var(--overflow-head);border-bottom-color:var(--overflow-border);">
           <div><div class="modal-title" style="color:var(--overflow-text);">${isPending?'Enter Hours Worked':'Edit Hours'}</div>
-          <div class="modal-subtitle">${workerName} · ${formatDateStr(dateStr)}</div></div>
-          <button class="modal-close" onclick="closeModal()">✕</button>
+          <div class="modal-subtitle">${workerName} \xb7 ${formatDateStr(dateStr)}</div></div>
+          <button class="modal-close" onclick="closeModal()">&#x2715;</button>
         </div>
         <div class="modal-body">
-          <div class="form-group full"><label class="form-label">Hours Worked</label>
-            <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" value="${isPending?'':currentHrs}" placeholder="e.g. 6" />
-            ${w&&w.hourly_rate?`<div style="font-size:11px;color:var(--accent);margin-top:3px;">R ${parseFloat(w.hourly_rate).toFixed(2)}/hr</div>`:''}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div class="form-group full" style="margin:0"><label class="form-label">Start Time</label>
+              <input class="form-input" id="wh-start" type="time" value="${startTime||''}" oninput="calcWeekendHours()" /></div>
+            <div class="form-group full" style="margin:0"><label class="form-label">End Time</label>
+              <input class="form-input" id="wh-end" type="time" value="${endTime||''}" oninput="calcWeekendHours()" /></div>
           </div>
+          <div class="form-group full"><label class="form-label">Hours Worked <span id="wh-calc" style="font-size:11px;color:var(--accent);margin-left:6px;font-weight:600;"></span></label>
+            <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" value="${isPending?'':currentHrs}" placeholder="e.g. 6" />
+            ${rateHtml}
+          </div>
+          ${copyRow}
         </div>
         <div class="modal-footer">
           <button class="btn-danger" onclick="deleteWeekendHours('${entryId}')"><i class="ti ti-trash"></i> Remove</button>
           <button class="btn-secondary" onclick="closeModal()">Cancel</button>
-          <button class="btn-primary" id="wh-save" onclick="updateWeekendHours('${entryId}')" style="background:var(--overflow-border);">Save Hours</button>
+          <button class="btn-primary" id="wh-save" onclick="updateWeekendHours('${entryId}','${dateStr}','${workerId}')" style="background:var(--overflow-border);">Save Hours</button>
         </div>
       </div>
     </div>`;
-  setTimeout(()=>{ const el=document.getElementById('wh-hrs'); if(el){el.focus();if(!isPending)el.select();} },50);
+  setTimeout(()=>{ const el=document.getElementById('wh-start'); if(el)el.focus(); },50);
 }
 
-async function updateWeekendHours(entryId){
+async function updateWeekendHours(entryId,dateStr,workerId){
   const hrs=parseFloat(document.getElementById('wh-hrs').value)||null;
+  const startT=document.getElementById('wh-start')?.value||null;
+  const endT=document.getElementById('wh-end')?.value||null;
+  const timePart=startT&&endT?`${startT}\u2013${endT}`:startT?`Start: ${startT}`:'';
+  const notes=timePart||null;
+  const copyOthers=document.getElementById('wh-copy')?.checked||false;
   const btn=document.getElementById('wh-save');
   btn.disabled=true;btn.textContent='Saving...';
-  const {error}=await sb.from('weekend_schedule').update({hours_worked:hrs}).eq('id',entryId);
+
+  const {error}=await sb.from('weekend_schedule').update({hours_worked:hrs,notes}).eq('id',entryId);
   if(error){showToast('Error: '+error.message,'error');btn.disabled=false;btn.textContent='Update';return;}
-  showToast('Hours updated!');
+
+  // Copy to other workers on the same weekend if requested
+  if(copyOthers&&hrs&&dateStr&&workerId){
+    // Only copy to other workers on the same date (not the partner Sat/Sun)
+    const otherWorkerIds=workers.filter(w=>w.id!==workerId).map(w=>w.id);
+    if(otherWorkerIds.length){
+      const {data:existing}=await sb.from('weekend_schedule')
+        .select('id,worker_id,schedule_date,hours_worked')
+        .eq('schedule_date',dateStr)
+        .in('worker_id',otherWorkerIds)
+        .is('absence_type',null);
+      const existingEntries=existing||[];
+      for(const e of existingEntries){
+        await sb.from('weekend_schedule').update({hours_worked:hrs,notes}).eq('id',e.id);
+      }
+    }
+  }
+
+  showToast('Hours updated!'+(copyOthers&&hrs?' (copied to other workers)':''));
   closeModal();
   renderWorkerMonthlyView();
 }
@@ -6813,6 +7016,7 @@ function renderSalarySummary(){renderWorkerMonthlyView();}
     <button class="add-btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);" onclick="openWorkerModal()"><i class="ti ti-plus"></i> Add Worker</button>
     <button class="add-btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);" onclick="printWeekendSchedule()"><i class="ti ti-printer"></i> Print Schedule</button>
     <button class="add-btn" onclick="openAssignWeekendModal()"><i class="ti ti-calendar-plus"></i> Weekend Workers</button>
+    <button class="add-btn" style="background:#1a3d27;color:#fff;border:none;" onclick="openSimplePayModal()"><i class="ti ti-cloud-upload"></i> Export to SimplePay</button>
   </div>
   <div class="page-body" style="max-width:1200px;">
 
@@ -6850,5 +7054,388 @@ function renderSalarySummary(){renderWorkerMonthlyView();}
 
   </div>
 </div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SIMPLEPAY INTEGRATION
+══════════════════════════════════════════════════════════ -->
+<div id="simplepay-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--surface);border-radius:14px;max-width:680px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.18);">
+
+    <!-- Header -->
+    <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;">
+          <span style="width:28px;height:28px;background:#1a3d27;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;"><i class="ti ti-cloud-upload" style="color:#fff;font-size:14px;"></i></span>
+          Export to SimplePay
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px;">Push hours &amp; salary totals to SimplePay payroll</div>
+      </div>
+      <button onclick="closeSimplePayModal()" style="width:30px;height:30px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);cursor:pointer;font-size:16px;color:var(--muted);">✕</button>
+    </div>
+
+    <!-- Month selector -->
+    <div style="padding:14px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <span style="font-size:13px;font-weight:500;color:var(--muted);">Payroll month:</span>
+      <button onclick="spNavMonth(-1)" style="width:28px;height:28px;border:1px solid var(--border);border-radius:5px;background:var(--surface2);cursor:pointer;color:var(--muted);font-size:14px;display:flex;align-items:center;justify-content:center;"><i class="ti ti-chevron-left"></i></button>
+      <span id="sp-month-label" style="font-size:14px;font-weight:600;color:var(--text);min-width:130px;text-align:center;"></span>
+      <button onclick="spNavMonth(1)" style="width:28px;height:28px;border:1px solid var(--border);border-radius:5px;background:var(--surface2);cursor:pointer;color:var(--muted);font-size:14px;display:flex;align-items:center;justify-content:center;"><i class="ti ti-chevron-right"></i></button>
+      <button onclick="spLoadPreview()" style="padding:5px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;margin-left:6px;display:flex;align-items:center;gap:5px;"><i class="ti ti-refresh" style="font-size:12px"></i> Load Preview</button>
+    </div>
+
+    <!-- Preview table -->
+    <div style="flex:1;overflow-y:auto;padding:16px 22px;">
+      <div id="sp-preview" style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center;">
+        Select a month and click <strong>Load Preview</strong> to see payroll data.
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:14px 22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;flex-wrap:wrap;gap:10px;">
+      <div id="sp-status" style="font-size:12px;color:var(--muted);flex:1;"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="closeSimplePayModal()" class="btn-secondary" style="padding:8px 18px;">Cancel</button>
+        <button id="sp-submit-btn" onclick="spSubmitToSimplePay()" style="padding:8px 20px;background:#1a3d27;color:#fff;border:none;border-radius:7px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;opacity:.4;pointer-events:none;">
+          <i class="ti ti-cloud-upload" style="font-size:13px"></i> Submit to SimplePay
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── SIMPLEPAY CONFIG ──────────────────────────────────────
+const SP_API_KEY = '3c8e1c01643b37eb7d65ebf06dbb9432';
+const SP_BASE    = 'https://api.payroll.simplepay.cloud/v1';
+const SP_HEADERS = {'Content-Type':'application/json','Authorization':SP_API_KEY};
+
+// Call SimplePay via Supabase Edge Function proxy (avoids CORS)
+async function spFetch(path, options={}){
+  const method = options.method||'GET';
+  const body = options.body||null;
+  const proxyUrl = `${SUPABASE_URL}/functions/v1/simplepay-proxy`;
+
+  let res;
+  try {
+    res = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'apikey': SUPABASE_KEY
+      },
+      body: JSON.stringify({ path, method, body, apiKey: SP_API_KEY })
+    });
+  } catch(e) {
+    throw new Error('Could not reach the SimplePay proxy. Make sure the edge function is deployed in Supabase.');
+  }
+
+  const txt = await res.text();
+  let parsed;
+  try { parsed = JSON.parse(txt); } catch(e) {
+    throw new Error(`Unexpected proxy response (${res.status}): ${txt.slice(0,300)}`);
+  }
+
+  if(!res.ok){
+    throw new Error(`Proxy error ${res.status}: ${JSON.stringify(parsed).slice(0,200)}`);
+  }
+
+  // Support both envelope format {ok,status,data} and raw passthrough
+  if(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'data' in parsed && 'status' in parsed){
+    // New envelope format
+    if(!parsed.ok){
+      const spStatus = parsed.status;
+      const errMsg = parsed.error || JSON.stringify(parsed.data||'');
+      if(spStatus === 401 || spStatus === 403){
+        throw new Error(`SimplePay API key rejected (${spStatus}). Check your API key is correct and active.`);
+      }
+      throw new Error(`SimplePay error ${spStatus}: ${errMsg}`);
+    }
+    return parsed.data;
+  }
+
+  // Raw passthrough (old edge function or direct array/object from SimplePay)
+  return parsed;
+}
+
+let spMonth = new Date();
+let spPreviewData = []; // [{worker, simplepayEmployee, totalHours, grossPay}]
+let spClientId = null;
+let spEmployees = [];
+
+// ── MODAL OPEN/CLOSE ──────────────────────────────────────
+function openSimplePayModal(){
+  spMonth = new Date(currentWorkerMonth);
+  document.getElementById('simplepay-modal').style.display='flex';
+  spUpdateMonthLabel();
+  spResetPreview();
+}
+function closeSimplePayModal(){
+  document.getElementById('simplepay-modal').style.display='none';
+  spPreviewData=[];
+}
+function spUpdateMonthLabel(){
+  const lbl=document.getElementById('sp-month-label');
+  if(lbl) lbl.textContent=`${MONTHS[spMonth.getMonth()]} ${spMonth.getFullYear()}`;
+}
+function spNavMonth(dir){
+  spMonth=new Date(spMonth.getFullYear(), spMonth.getMonth()+dir, 1);
+  spUpdateMonthLabel();
+  spResetPreview();
+}
+function spResetPreview(){
+  spPreviewData=[];
+  document.getElementById('sp-preview').innerHTML='<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center;">Select a month and click <strong>Load Preview</strong> to see payroll data.</div>';
+  const btn=document.getElementById('sp-submit-btn');
+  btn.style.opacity='.4';btn.style.pointerEvents='none';
+  document.getElementById('sp-status').textContent='';
+}
+
+// ── COMPUTE HOURS (mirrors renderWorkerMonthlyView logic) ─
+async function spComputeWorkerHours(year, month){
+  const dim=new Date(year,month+1,0).getDate();
+  const startStr=`${year}-${String(month+1).padStart(2,'0')}-01`;
+  const endStr=`${year}-${String(month+1).padStart(2,'0')}-${String(dim).padStart(2,'0')}`;
+
+  const {data:schedData}=await sb.from('weekend_schedule')
+    .select('worker_id,hours_worked,schedule_date,id,absence_type')
+    .gte('schedule_date',startStr).lte('schedule_date',endStr);
+  const sched=schedData||[];
+
+  const results=[];
+  workers.forEach(w=>{
+    const rate=w.hourly_rate?parseFloat(w.hourly_rate):0;
+    let totalHours=0, grossPay=0;
+    let breakdown={weekday:0,saturday:0,sunday:0,publicHoliday:0,absent:0,sick:0,leave:0};
+
+    for(let n=1;n<=dim;n++){
+      const d=new Date(year,month,n);
+      const dStr=dateKey(d);
+      const dow=d.getDay();
+      const isWeekday=dow>=1&&dow<=5;
+      const isSat=dow===6;
+      const isSun=dow===0;
+      const ph=getSAPublicHoliday(d);
+
+      if(ph){
+        const entry=sched.find(s=>s.worker_id===w.id&&s.schedule_date===dStr);
+        if(entry&&entry.hours_worked){
+          const hrs=parseFloat(entry.hours_worked);
+          totalHours+=hrs; grossPay+=hrs*rate*2;
+          breakdown.publicHoliday+=hrs;
+        }
+      } else if(isWeekday){
+        const absence=sched.find(s=>s.worker_id===w.id&&s.schedule_date===dStr&&s.absence_type);
+        if(absence){
+          if(absence.absence_type==='sick'||absence.absence_type==='leave'){
+            totalHours+=9; grossPay+=9*rate;
+            breakdown[absence.absence_type==='sick'?'sick':'leave']+=9;
+          } else {
+            breakdown.absent++;
+          }
+        } else {
+          totalHours+=9; grossPay+=9*rate;
+          breakdown.weekday+=9;
+        }
+      } else if(isSat||isSun){
+        const mult=isSun?1.5:1;
+        const entry=sched.find(s=>s.worker_id===w.id&&s.schedule_date===dStr);
+        if(entry&&entry.hours_worked){
+          const hrs=parseFloat(entry.hours_worked);
+          totalHours+=hrs; grossPay+=hrs*rate*mult;
+          breakdown[isSun?'sunday':'saturday']+=hrs;
+        }
+      }
+    }
+    results.push({worker:w, rate, totalHours, grossPay, breakdown});
+  });
+  return results;
+}
+
+// ── LOAD PREVIEW ──────────────────────────────────────────
+async function spLoadPreview(){
+  const preview=document.getElementById('sp-preview');
+  const status=document.getElementById('sp-status');
+  preview.innerHTML='<div style="display:flex;align-items:center;gap:10px;color:var(--muted);padding:24px 0;justify-content:center;"><div class="loader-spinner"></div> Loading workers &amp; fetching SimplePay employees…</div>';
+  status.textContent='';
+
+  try{
+    // 1. Make sure workers are loaded
+    if(!workers.length) await loadWorkers();
+
+    // 2. Fetch SimplePay clients
+    const clientData = await spFetch('/clients/');
+    if(!clientData.length) throw new Error('No clients found on SimplePay account.');
+    spClientId=clientData[0].client.id;
+    const clientName=clientData[0].client.name||'Unknown';
+
+    // 3. Fetch SimplePay employees for this client
+    const empData = await spFetch(`/employees/?client_id=${spClientId}`);
+    spEmployees=empData.map(e=>e.employee||e);
+
+    // 4. Compute hours from GuestBook workers page
+    const year=spMonth.getFullYear(), month=spMonth.getMonth();
+    const computed=await spComputeWorkerHours(year, month);
+
+    // 5. Match GuestBook workers → SimplePay employees (by name, case-insensitive)
+    spPreviewData=computed.map(row=>{
+      const wName=row.worker.name.trim().toLowerCase();
+      const matched=spEmployees.find(e=>{
+        const full=((e.first_name||'')+' '+(e.last_name||'')).trim().toLowerCase();
+        const display=(e.display_name||'').trim().toLowerCase();
+        return full===wName||display===wName||full.includes(wName)||wName.includes(full);
+      })||null;
+      return {...row, spEmployee:matched};
+    });
+
+    // 6. Render table
+    let html=`
+    <div style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+      <div style="font-size:13px;font-weight:600;color:var(--text);">${MONTHS[month]} ${year} — Payroll Preview</div>
+      <div style="font-size:11px;background:var(--accent-light);color:var(--accent);border:1px solid var(--accent);border-radius:20px;padding:2px 10px;">SimplePay: ${clientName}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:var(--surface2);border-bottom:2px solid var(--border);">
+          <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;">GuestBook Worker</th>
+          <th style="padding:8px 10px;text-align:center;font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;">Total Hours</th>
+          <th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;">Gross Pay</th>
+          <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;">SimplePay Match</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+    let allMatched=true;
+    spPreviewData.forEach((row,i)=>{
+      const matched=!!row.spEmployee;
+      if(!matched) allMatched=false;
+      const matchCell=matched
+        ?`<span style="display:inline-flex;align-items:center;gap:5px;background:var(--accent-light);color:var(--accent);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;"><i class="ti ti-check" style="font-size:11px"></i>${row.spEmployee.first_name} ${row.spEmployee.last_name}</span>`
+        :`<span style="display:inline-flex;align-items:center;gap:5px;background:#fee2e2;color:#9b1c1c;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;"><i class="ti ti-alert-circle" style="font-size:11px"></i>No match found</span>`;
+
+      const breakdown=row.breakdown;
+      const tip=`Weekday: ${breakdown.weekday}h | Sat: ${breakdown.saturday}h | Sun: ${breakdown.sunday}h | PH: ${breakdown.publicHoliday}h | Sick: ${breakdown.sick}h | Leave: ${breakdown.leave}h | Absent days: ${breakdown.absent}`;
+
+      html+=`<tr style="border-bottom:1px solid var(--border);${i%2===1?'background:var(--surface2)':''}">
+        <td style="padding:10px 10px;">
+          <div style="font-weight:600;color:var(--text);">${row.worker.name}</div>
+          <div style="font-size:11px;color:var(--muted);">${row.worker.role||''} · R ${row.rate.toFixed(2)}/hr</div>
+        </td>
+        <td style="padding:10px;text-align:center;">
+          <div style="font-size:15px;font-weight:700;color:var(--accent);">${row.totalHours}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;" title="${tip}">ⓘ breakdown</div>
+        </td>
+        <td style="padding:10px;text-align:right;">
+          <div style="font-size:15px;font-weight:700;color:var(--text);">R ${row.grossPay.toFixed(2)}</div>
+        </td>
+        <td style="padding:10px;">${matchCell}</td>
+      </tr>`;
+    });
+
+    const grandTotal=spPreviewData.reduce((s,r)=>s+r.grossPay,0);
+    html+=`<tr style="background:var(--accent-light);border-top:2px solid var(--accent);">
+      <td style="padding:12px 10px;font-weight:700;color:var(--accent);" colspan="2">Grand Total</td>
+      <td style="padding:12px 10px;text-align:right;font-size:17px;font-weight:800;color:var(--accent);">R ${grandTotal.toFixed(2)}</td>
+      <td></td>
+    </tr>`;
+
+    html+=`</tbody></table>`;
+
+    if(!allMatched){
+      html+=`<div style="margin-top:12px;background:#fff7ed;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e;display:flex;align-items:flex-start;gap:8px;">
+        <i class="ti ti-alert-triangle" style="font-size:16px;flex-shrink:0;margin-top:1px;"></i>
+        <div><strong>Some workers could not be matched.</strong> Names must match in SimplePay (first + last name). Workers without a match will be skipped during submission. Please ensure employee names match exactly in SimplePay, or add them first.</div>
+      </div>`;
+    }
+
+    preview.innerHTML=html;
+
+    // Enable submit button only if at least one matched
+    const hasMatch=spPreviewData.some(r=>r.spEmployee);
+    const btn=document.getElementById('sp-submit-btn');
+    if(hasMatch){
+      btn.style.opacity='1';btn.style.pointerEvents='auto';
+    }
+    status.innerHTML=`<span style="color:var(--accent);">✓ Loaded ${spPreviewData.length} workers · ${spEmployees.length} SimplePay employees found</span>`;
+
+  } catch(err){
+    const msg = err.message.replace(/\n/g,'<br>');
+    preview.innerHTML=`<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:14px 16px;color:#9b1c1c;font-size:13px;display:flex;align-items:flex-start;gap:10px;">
+      <i class="ti ti-alert-circle" style="font-size:20px;flex-shrink:0;margin-top:2px;"></i>
+      <div><strong>Error loading data</strong><br><br>${msg}</div>
+    </div>`;
+    status.textContent='';
+  }
+}
+
+// ── SUBMIT TO SIMPLEPAY ───────────────────────────────────
+async function spSubmitToSimplePay(){
+  const btn=document.getElementById('sp-submit-btn');
+  const status=document.getElementById('sp-status');
+
+  const matched=spPreviewData.filter(r=>r.spEmployee);
+  if(!matched.length){showToast('No matched workers to submit','error');return;}
+
+  const monthName=`${MONTHS[spMonth.getMonth()]} ${spMonth.getFullYear()}`;
+  if(!confirm(`Submit payroll for ${matched.length} worker(s) for ${monthName} to SimplePay?\n\nThis will update their basic salary amounts on SimplePay.`))return;
+
+  btn.disabled=true;btn.style.opacity='.6';
+  btn.innerHTML='<div class="loader-spinner" style="width:14px;height:14px;border-width:2px;margin-right:4px;"></div> Submitting…';
+  status.textContent='';
+
+  try{
+    // Build bulk_input entities — set basic_salary fixed_amount per worker
+    const entities=matched.map(row=>({
+      id: String(row.spEmployee.id),
+      attributes:{
+        'calc.basic_salary.fixed_amount': row.grossPay.toFixed(2)
+      }
+    }));
+
+    const body = await spFetch(`/clients/${spClientId}/bulk_input`,{
+      method:'POST',
+      body:JSON.stringify({entities})
+    });
+
+    if(body!==null){
+      showToast(`✓ ${matched.length} worker(s) submitted to SimplePay!`,'success');
+      status.innerHTML=`<span style="color:var(--accent);font-weight:600;">✓ Successfully submitted ${matched.length} worker(s) for ${monthName}</span>`;
+
+      // Show result summary in preview
+      const preview=document.getElementById('sp-preview');
+      const resultRows=matched.map(r=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);">
+          <div>
+            <span style="font-weight:600;color:var(--text);">${r.worker.name}</span>
+            <span style="font-size:11px;color:var(--muted);margin-left:8px;">→ ${r.spEmployee.first_name} ${r.spEmployee.last_name}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span style="font-size:13px;font-weight:700;color:var(--text);">R ${r.grossPay.toFixed(2)}</span>
+            <span style="font-size:11px;background:var(--accent-light);color:var(--accent);border-radius:20px;padding:2px 10px;font-weight:600;"><i class="ti ti-check"></i> Sent</span>
+          </div>
+        </div>`).join('');
+
+      preview.innerHTML=`
+        <div style="background:var(--accent-light);border:1px solid var(--accent);border-radius:10px;margin-bottom:14px;padding:14px 16px;display:flex;align-items:center;gap:10px;">
+          <i class="ti ti-circle-check" style="font-size:24px;color:var(--accent);"></i>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--accent);">Payroll submitted successfully!</div>
+            <div style="font-size:12px;color:var(--accent);opacity:.8;">${matched.length} worker(s) · ${monthName}</div>
+          </div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">${resultRows}</div>`;
+    } else {
+      const msg=body.message||body.error||JSON.stringify(body)||`HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+  } catch(err){
+    showToast('SimplePay error: '+err.message,'error');
+    status.innerHTML=`<span style="color:#dc2626;">✗ ${err.message}</span>`;
+  } finally{
+    btn.disabled=false;btn.style.opacity='1';
+    btn.innerHTML='<i class="ti ti-cloud-upload" style="font-size:13px"></i> Submit to SimplePay';
+  }
+}
+</script>
+
 </body>
 </html>
