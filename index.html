@@ -1556,17 +1556,19 @@ function openGroupBookingModal(dateStr, room){
         <!-- GROUP NAMES -->
         <div class="form-group full">
           <label class="form-label" style="font-size:13px;font-weight:600;color:var(--overflow-text);margin-bottom:6px;display:flex;align-items:center;gap:6px;"><i class="ti ti-users" style="font-size:13px"></i> Group Members</label>
-          <div style="display:grid;grid-template-columns:1fr auto auto;gap:4px;padding:0 0 4px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">
-            <span>Name</span><span style="text-align:center;white-space:nowrap;">Ate B/fast</span><span></span>
+          <div style="display:grid;grid-template-columns:1fr 120px auto auto;gap:4px;padding:0 0 4px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">
+            <span>Name</span><span>Room</span><span style="text-align:center;white-space:nowrap;">Ate B/fast</span><span></span>
           </div>
           <div class="group-names-list" id="group-names-list">
-            <div class="group-name-row" data-idx="0" style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;">
+            <div class="group-name-row" data-idx="0" style="display:grid;grid-template-columns:1fr 120px auto auto;gap:6px;align-items:center;">
               <input type="text" placeholder="Person 1 — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,0)" />
+              <select class="form-input group-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleGroupGuesthouseSection()">${ALL_ROOMS.map(r=>`<option value="${r}"${r===room?' selected':''}>${r}</option>`).join('')}</select>
               <input type="checkbox" class="group-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" onchange="calcGroupMealTotal()" />
               <button class="group-name-remove" onclick="removeGroupName(0)" title="Remove">✕</button>
             </div>
-            <div class="group-name-row" data-idx="1" style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;">
+            <div class="group-name-row" data-idx="1" style="display:grid;grid-template-columns:1fr 120px auto auto;gap:6px;align-items:center;">
               <input type="text" placeholder="Person 2 — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,1)" />
+              <select class="form-input group-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleGroupGuesthouseSection()">${ALL_ROOMS.map(r=>`<option value="${r}"${r===room?' selected':''}>${r}</option>`).join('')}</select>
               <input type="checkbox" class="group-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" onchange="calcGroupMealTotal()" />
               <button class="group-name-remove" onclick="removeGroupName(1)" title="Remove">✕</button>
             </div>
@@ -1604,8 +1606,8 @@ function openGroupBookingModal(dateStr, room){
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Room</label>
-            <select class="form-input" id="fg-room" onchange="toggleGroupGuesthouseSection()">${roomOptions}</select>
+          <div class="form-group"><label class="form-label">Default Room <span style="font-size:10px;color:var(--muted);font-weight:400;">(pre-fills all above)</span></label>
+            <select class="form-input" id="fg-room" onchange="applyDefaultRoomToAll();toggleGroupGuesthouseSection()">${roomOptions}</select>
           </div>
           <div class="form-group"><label class="form-label">Notes</label>
             <input class="form-input" id="fg-notes" placeholder="Special requests..." />
@@ -1707,10 +1709,13 @@ function addGroupNameRow(){
   row.className='group-name-row';
   row.dataset.idx=idx;
   row.style.display='grid';
-  row.style.gridTemplateColumns='1fr auto auto';
+  row.style.gridTemplateColumns='1fr 120px auto auto';
   row.style.gap='6px';
   row.style.alignItems='center';
-  row.innerHTML=`<input type="text" placeholder="Person ${idx+1} — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,${idx})" /><input type="checkbox" class="group-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" onchange="calcGroupMealTotal()" /><button class="group-name-remove" onclick="removeGroupName(${idx})" title="Remove">✕</button>`;
+  // Default room = whatever the default room selector currently says
+  const defRoom=(document.getElementById('fg-room')||{}).value||ALL_ROOMS[0];
+  const roomOpts=ALL_ROOMS.map(r=>`<option value="${r}"${r===defRoom?' selected':''}>${r}</option>`).join('');
+  row.innerHTML=`<input type="text" placeholder="Person ${idx+1} — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,${idx})" /><select class="form-input group-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleGroupGuesthouseSection()">${roomOpts}</select><input type="checkbox" class="group-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" onchange="calcGroupMealTotal()" /><button class="group-name-remove" onclick="removeGroupName(${idx})" title="Remove">✕</button>`;
   list.appendChild(row);
   row.querySelector('input').focus();
   updateGroupSummary();
@@ -1737,23 +1742,44 @@ function groupNameKey(e, idx){
   if(e.key==='Enter'){e.preventDefault();addGroupNameRow();}
 }
 
+function applyDefaultRoomToAll(){
+  const defRoom=(document.getElementById('fg-room')||{}).value;
+  if(!defRoom)return;
+  document.querySelectorAll('#group-names-list .group-room-select').forEach(sel=>{sel.value=defRoom;});
+  toggleGroupGuesthouseSection();
+}
+
 function toggleGroupGuesthouseSection(){
-  const roomSel=document.getElementById('fg-room');
   const section=document.getElementById('fg-guesthouse-section');
-  if(!roomSel||!section)return;
-  const isOvf=isOverflow(roomSel.value);
-  section.style.display=isOvf?'block':'none';
+  if(!section)return;
+  // Show guesthouse section if ANY person's room is an overflow room
+  const roomSelects=[...document.querySelectorAll('#group-names-list .group-room-select')];
+  const defRoomSel=document.getElementById('fg-room');
+  const anyOvf=roomSelects.length
+    ? roomSelects.some(s=>isOverflow(s.value))
+    : (defRoomSel&&isOverflow(defRoomSel.value));
+  section.style.display=anyOvf?'block':'none';
 }
 
 function updateGroupSummary(){
-  const inputs=[...document.querySelectorAll('.group-name-input')];
-  const names=inputs.map(i=>i.value.trim()).filter(Boolean);
+  const rows=[...document.querySelectorAll('#group-names-list .group-name-row')];
+  const entries=rows.map(r=>({
+    name:(r.querySelector('.group-name-input')||{}).value?.trim()||'',
+    room:(r.querySelector('.group-room-select')||{}).value||''
+  })).filter(e=>e.name);
+  const names=entries.map(e=>e.name);
   const sum=document.getElementById('group-summary');
   const txt=document.getElementById('group-summary-text');
   if(!sum||!txt)return;
   if(names.length>0){
     sum.style.display='flex';
-    txt.textContent=`${names.length} person${names.length!==1?'s':''}: ${names.join(', ')}`;
+    // Show each person with their room if rooms differ
+    const allSameRoom=entries.every(e=>e.room===entries[0].room);
+    if(allSameRoom){
+      txt.textContent=`${names.length} person${names.length!==1?'s':''}: ${names.join(', ')}`;
+    } else {
+      txt.textContent=`${names.length} people — ${entries.map(e=>e.room?`${e.name} (${e.room})`:e.name).join(', ')}`;
+    }
   } else {
     sum.style.display='none';
   }
@@ -1901,17 +1927,19 @@ async function saveGroupBooking(defDate, defRoom){
   const personData=rows.map(r=>({
     name:(r.querySelector('.group-name-input')||{}).value?.trim().toUpperCase()||'',
     breakfastEaten:!!(r.querySelector('.group-breakfast-tick')&&r.querySelector('.group-breakfast-tick').checked),
+    room:(r.querySelector('.group-room-select')||{}).value||(document.getElementById('fg-room')||{}).value||defRoom,
   })).filter(p=>p.name);
   const names=personData.map(p=>p.name);
   if(!names.length){showToast('Please add at least one person to the group.','error');return;}
 
-  const room=document.getElementById('fg-room').value;
   const checkin=document.getElementById('fg-checkin').value;
   if(!checkin){showToast('Please enter a check-in date.','error');return;}
   const checkout=document.getElementById('fg-checkout').value;
-  const isOvfRoom=isOverflow(room);
-  const guesthouse=isOvfRoom?uc(document.getElementById('fg-guesthouse').value.trim()):null;
-  if(isOvfRoom&&!guesthouse){showToast('Please enter the guesthouse name.','error');return;}
+
+  // Validate overflow rooms: any overflow person needs guesthouse
+  const anyOvf=personData.some(p=>isOverflow(p.room));
+  const guesthouse=anyOvf?uc(document.getElementById('fg-guesthouse').value.trim()):null;
+  if(anyOvf&&!guesthouse){showToast('Please enter the guesthouse name for overflow rooms.','error');return;}
 
   const btn=document.getElementById('group-save-btn');
   btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i> Saving...';
@@ -1921,8 +1949,8 @@ async function saveGroupBooking(defDate, defRoom){
   const invoice=prefixIN(document.getElementById('fg-invoice').value.trim());
   const voucher=uc(document.getElementById('fg-voucher').value.trim())||null;
   const notes=uc(document.getElementById('fg-notes').value.trim());
-  const ghRoom=null; // removed from group bookings
-  const ghCost=isOvfRoom?(parseFloat(document.getElementById('fg-gh-cost').value)||null):null;
+  const ghRoom=null;
+  const ghCost=anyOvf?(parseFloat(document.getElementById('fg-gh-cost').value)||null):null;
 
   const start=parseDate(checkin);
   const end=checkout?parseDate(checkout):start;
@@ -1930,12 +1958,14 @@ async function saveGroupBooking(defDate, defRoom){
 
   for(const person of personData){
     const name=person.name;
+    const personRoom=person.room;
+    const isOvfRoom=isOverflow(personRoom);
     const base={
       name,company,agency,invoice:uc(invoice),voucher,notes,
       paid:window._groupPaid===true,dirty:false,
       checkin:checkin||null,checkout:checkout||null,
-      overflow:isOvfRoom,room,
-      guesthouse:isOvfRoom?guesthouse:null,gh_room:ghRoom,gh_cost:ghCost,
+      overflow:isOvfRoom,room:personRoom,
+      guesthouse:isOvfRoom?guesthouse:null,gh_room:ghRoom,gh_cost:isOvfRoom?ghCost:null,
       owed_paid:isOvfRoom?(window._groupOwedPaid!==false):true,
       cell:null,invoice_pdf_url:null,voucher_pdf_url:null,aroma_pdf_url:null,
       meal_breakfast:person.breakfastEaten?0:(parseFloat(document.getElementById('fg-meal-breakfast').value)||null),
@@ -1950,8 +1980,7 @@ async function saveGroupBooking(defDate, defRoom){
     }
   }
 
-  // ── GROUP: use plain INSERT (not upsert) — multiple people share the same room+date ──
-  // Strip any id field so Supabase generates fresh UUIDs for each record
+  // ── GROUP: use plain INSERT (not upsert) — multiple people may share or have different rooms ──
   const cleanRecords = allRecords.map(({id, ...r}) => r);
   const {error} = await sb.from('bookings').insert(cleanRecords);
   if(error){
@@ -1959,7 +1988,10 @@ async function saveGroupBooking(defDate, defRoom){
     btn.disabled=false;btn.innerHTML='<i class="ti ti-users"></i> Save Group Booking';
     return;
   }
-  showToast(`Group of ${names.length} saved to ${room}!`);
+  // Build a summary of room assignments
+  const roomSummary=[...new Set(personData.map(p=>p.room))];
+  const summaryStr=roomSummary.length===1?roomSummary[0]:roomSummary.join(', ');
+  showToast(`Group of ${names.length} saved — Rooms: ${summaryStr}`);
   closeModal();
   await loadAndRender();
 }
@@ -2100,7 +2132,15 @@ function openGroupDetailModal(dateStr, room){
 }
 
 async function deleteGroupBooking(dateStr, room){
-  if(!confirm('Delete the entire group booking? All members will be removed.'))return;
+  showConfirm('Delete the entire group booking? All members will be removed.',async function(){
+  const bArr2=getBookings(dateStr,room);
+  const b2=bArr2[0];
+  const {data:d2}=await sb.from('bookings').select('id').eq('room',room).gte('booking_date',b2.checkin||dateStr).lte('booking_date',b2.checkout||dateStr);
+  const allIds2=(d2||[]).map(r=>r.id);
+  const ok2=await deleteBookingFromDB(allIds2);
+  if(ok2){showToast('Group booking deleted');closeModal();await loadAndRender();}
+  },{confirmLabel:'Delete Group',confirmStyle:'background:#dc2626;color:#fff;border:none;'});
+  return;
   const bArr=getBookings(dateStr,room);
   const ids=bArr.map(x=>x.id).filter(Boolean);
   // Get all records across the full stay
@@ -2508,8 +2548,9 @@ function openEditGroupModal(dateStr, room){
   const ovf=!!(b.overflow||isOverflow(room));
 
   const memberRows=bArr.map((person,i)=>`
-    <div class="group-name-row" data-id="${person.id}" style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;">
+    <div class="group-name-row" data-id="${person.id}" style="display:grid;grid-template-columns:1fr 110px auto auto;gap:6px;align-items:center;">
       <input type="text" class="group-edit-name-input form-input" value="${person.name}" placeholder="First & Last Name" style="font-size:13px;" />
+      <select class="form-input group-edit-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleEditGroupGuesthouseSection()">${ALL_ROOMS.map(r=>`<option value="${r}"${r===(person.room||room)?' selected':''}>${r}</option>`).join('')}</select>
       <input type="checkbox" class="group-edit-breakfast-tick" title="Ate breakfast physically" ${person.breakfast_eaten?'checked':''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" />
       <button class="group-name-remove" onclick="markGroupPersonDeleted(this)" title="Remove person" style="${person.checked_in?'opacity:.4;cursor:not-allowed;':''}" ${person.checked_in?'disabled title="Cannot remove — already checked in"':''}>✕</button>
     </div>`).join('');
@@ -2530,8 +2571,8 @@ function openEditGroupModal(dateStr, room){
 
           <!-- SECTION: GROUP MEMBERS -->
           <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px;"><i class="ti ti-users" style="font-size:12px"></i> Group Members</div>
-          <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;padding:0 0 4px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">
-            <span>Name</span><span style="text-align:center;white-space:nowrap;">Ate B/fast</span><span></span>
+          <div style="display:grid;grid-template-columns:1fr 110px auto auto;gap:6px;padding:0 0 4px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">
+            <span>Name</span><span>Room</span><span style="text-align:center;white-space:nowrap;">Ate B/fast</span><span></span>
           </div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Checked-in members cannot be removed</div>
           <div id="edit-group-list" style="display:flex;flex-direction:column;gap:6px;">${memberRows}</div>
@@ -2561,8 +2602,8 @@ function openEditGroupModal(dateStr, room){
             </div>
           </div>
           <div class="form-row" style="align-items:end;">
-            <div class="form-group"><label class="form-label">Room</label>
-              <select class="form-input" id="eg-room">${roomOptions}</select>
+            <div class="form-group"><label class="form-label">Default Room <span style="font-size:10px;color:var(--muted);font-weight:400;">(pre-fills new rows)</span></label>
+              <select class="form-input" id="eg-room" onchange="toggleEditGroupGuesthouseSection()">${roomOptions}</select>
             </div>
             <div class="form-group"><label class="form-label">Notes</label>
               <input class="form-input" id="eg-notes" placeholder="Special requests..." value="${b.notes||''}" />
@@ -2578,7 +2619,8 @@ function openEditGroupModal(dateStr, room){
           </div>
 
           <!-- GUESTHOUSE (overflow only) -->
-          ${ovf?`<div class="overflow-section" style="margin-top:4px;">
+          <div id="eg-guesthouse-section" style="display:${ovf?'block':'none'}">
+          <div class="overflow-section" style="margin-top:4px;">
             <div class="overflow-section-title"><i class="ti ti-building"></i> External Guesthouse Details</div>
             <div class="form-group full autocomplete-wrap"><label class="form-label">Guesthouse Name</label>
               <input class="form-input overflow-input" id="eg-guesthouse" placeholder="Start typing or select..." value="${b.guesthouse||''}" autocomplete="off" oninput="acGuesthouseGroup(this.value)" onkeydown="acGuesthouseKeyGroup(event)" />
@@ -2594,8 +2636,8 @@ function openEditGroupModal(dateStr, room){
                 <span class="status-badge owed${b.owed_paid===false?' active':''}" id="sbeg-owed" onclick="toggleEditGroupOwed('owed')">Still owe them</span>
               </div>
             </div>
-          </div>`:''}
-
+          </div>
+          </div>
           <!-- MEAL ALLOWANCES -->
           <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;margin-top:4px;">
             <div style="font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="ti ti-tools-kitchen-2" style="font-size:13px"></i> Meal Allowances (R per person per day)</div>
@@ -2666,10 +2708,24 @@ function addEditGroupRow(){
   const row=document.createElement('div');
   row.className='group-name-row';
   row.dataset.id='new';
-  row.style.cssText='display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;';
-  row.innerHTML=`<input type="text" class="group-edit-name-input form-input" placeholder="New Person — First & Last Name" style="font-size:13px;" /><input type="checkbox" class="group-edit-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" /><button class="group-name-remove" onclick="this.closest('.group-name-row').remove()" title="Remove">✕</button>`;
+  row.style.cssText='display:grid;grid-template-columns:1fr 110px auto auto;gap:6px;align-items:center;';
+  // Default to the shared room field (eg-room) or first ALL_ROOMS entry
+  const defRoom=(document.getElementById('eg-room')||{}).value||ALL_ROOMS[0];
+  const roomOpts=ALL_ROOMS.map(r=>`<option value="${r}"${r===defRoom?' selected':''}>${r}</option>`).join('');
+  row.innerHTML=`<input type="text" class="group-edit-name-input form-input" placeholder="New Person — First & Last Name" style="font-size:13px;" /><select class="form-input group-edit-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleEditGroupGuesthouseSection()">${roomOpts}</select><input type="checkbox" class="group-edit-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" /><button class="group-name-remove" onclick="this.closest('.group-name-row').remove()" title="Remove">✕</button>`;
   list.appendChild(row);
   row.querySelector('input').focus();
+}
+
+function toggleEditGroupGuesthouseSection(){
+  const section=document.getElementById('eg-guesthouse-section');
+  if(!section)return;
+  const personSelects=[...document.querySelectorAll('#edit-group-list .group-edit-room-select')];
+  const defSel=document.getElementById('eg-room');
+  const anyOvf=personSelects.length
+    ? personSelects.some(s=>isOverflow(s.value))
+    : (defSel&&isOverflow(defSel.value));
+  section.style.display=anyOvf?'block':'none';
 }
 
 async function saveEditedGroup(dateStr, room){
@@ -2691,39 +2747,11 @@ async function saveEditedGroup(dateStr, room){
   const newMealB=parseFloat((document.getElementById('eg-meal-breakfast')||{}).value)||null;
   const newMealL=parseFloat((document.getElementById('eg-meal-lunch')||{}).value)||null;
   const newMealD=parseFloat((document.getElementById('eg-meal-dinner')||{}).value)||null;
-  const newGuesthouse=ovf?uc((document.getElementById('eg-guesthouse')||{}).value||''):null;
-  const newGhCost=ovf?(parseFloat((document.getElementById('eg-gh-cost')||{}).value)||null):null;
-  const newOwedPaid=ovf?(window._editGroupOwedPaid!==false):true;
+  const anyOvfEdit=[...document.querySelectorAll('#edit-group-list .group-edit-room-select')].some(s=>isOverflow(s.value))||isOverflow(newRoom);
+  const newGuesthouse=anyOvfEdit?uc((document.getElementById('eg-guesthouse')||{}).value||''):null;
+  const newGhCost=anyOvfEdit?(parseFloat((document.getElementById('eg-gh-cost')||{}).value)||null):null;
+  const newOwedPaid=anyOvfEdit?(window._editGroupOwedPaid!==false):true;
   const newPaid=window._editGroupPaid===true;
-  const newOvf=isOverflow(newRoom);
-
-  // Build shared update payload (applied to all records in the stay)
-  const sharedUpdate={
-    company:newCompany||null,agency:newAgency||null,
-    invoice:newInvoice||null,voucher:newVoucher,notes:newNotes||null,
-    checkin:newCheckin||null,checkout:newCheckout||null,
-    room:newRoom,overflow:newOvf,
-    meal_breakfast:newMealB,meal_lunch:newMealL,meal_dinner:newMealD,
-    guesthouse:newOvf?(newGuesthouse||null):null,
-    gh_cost:newOvf?newGhCost:null,
-    owed_paid:newOwedPaid,
-    paid:newPaid,
-  };
-
-  // Fetch all records for this group stay (across all dates)
-  const {data:allRecords}=await sb.from('bookings').select('id').eq('room',room)
-    .gte('booking_date',b.checkin||dateStr).lte('booking_date',b.checkout||dateStr);
-  if(allRecords&&allRecords.length){
-    const {error}=await sb.from('bookings').update(sharedUpdate).in('id',allRecords.map(r=>r.id));
-    if(error){showToast('Error updating booking details: '+error.message,'error');btn.disabled=false;btn.textContent='Save Changes';return;}
-  }
-
-  // Update local cache with shared changes
-  Object.keys(bookings).forEach(key=>{
-    (bookings[key]||[]).forEach(entry=>{
-      if(entry.room===room){Object.assign(entry,sharedUpdate);}
-    });
-  });
 
   const rows=[...document.querySelectorAll('#edit-group-list .group-name-row')];
 
@@ -2736,13 +2764,13 @@ async function saveEditedGroup(dateStr, room){
     for(const pid of deletedIds){
       const person=bArr.find(x=>x.id===pid);
       if(!person)continue;
-      const {data}=await sb.from('bookings').select('id').eq('room',room).eq('name',person.name)
+      const {data}=await sb.from('bookings').select('id').eq('room',person.room||room).eq('name',person.name)
         .gte('booking_date',person.checkin||dateStr).lte('booking_date',person.checkout||dateStr);
       await deleteBookingFromDB((data||[]).map(r=>r.id));
     }
   }
 
-  // Rename changed people
+  // Update existing people (name, room, breakfast)
   for(const row of rows){
     if(row.querySelector('button[data-deleted="true"]'))continue;
     if(row.dataset.id==='new')continue;
@@ -2750,15 +2778,41 @@ async function saveEditedGroup(dateStr, room){
     if(!person)continue;
     const newName=row.querySelector('.group-edit-name-input').value.trim().toUpperCase();
     const newBreakfastEaten=!!(row.querySelector('.group-edit-breakfast-tick')&&row.querySelector('.group-edit-breakfast-tick').checked);
-    const updates={};
-    if(newName&&newName!==person.name)updates.name=newName;
-    if(newBreakfastEaten!==!!person.breakfast_eaten)updates.breakfast_eaten=newBreakfastEaten;
-    if(Object.keys(updates).length){
-      const {data}=await sb.from('bookings').select('id').eq('room',newRoom).eq('name',person.name)
-        .gte('booking_date',newCheckin||dateStr).lte('booking_date',newCheckout||dateStr);
-      await sb.from('bookings').update(updates).in('id',(data||[]).map(r=>r.id));
+    const personNewRoom=(row.querySelector('.group-edit-room-select')||{}).value||(person.room||newRoom);
+    const personIsOvf=isOverflow(personNewRoom);
+    const updates={
+      name:newName||person.name,
+      company:newCompany||null,agency:newAgency||null,
+      invoice:newInvoice||null,voucher:newVoucher,notes:newNotes||null,
+      checkin:newCheckin||null,checkout:newCheckout||null,
+      room:personNewRoom,overflow:personIsOvf,
+      meal_breakfast:newMealB,meal_lunch:newMealL,meal_dinner:newMealD,
+      guesthouse:personIsOvf?(newGuesthouse||null):null,
+      gh_cost:personIsOvf?newGhCost:null,
+      owed_paid:personIsOvf?newOwedPaid:true,
+      paid:newPaid,
+      breakfast_eaten:newBreakfastEaten,
+    };
+    const {data}=await sb.from('bookings').select('id').eq('room',person.room||room).eq('name',person.name)
+      .gte('booking_date',person.checkin||dateStr).lte('booking_date',person.checkout||dateStr);
+    if(data&&data.length){
+      const {error}=await sb.from('bookings').update(updates).in('id',data.map(r=>r.id));
+      if(error){showToast('Error updating member: '+error.message,'error');}
     }
   }
+
+  // Update local cache
+  Object.keys(bookings).forEach(key=>{
+    (bookings[key]||[]).forEach(entry=>{
+      if(entry.room===room){
+        entry.company=newCompany||null;entry.agency=newAgency||null;
+        entry.invoice=newInvoice||null;entry.voucher=newVoucher;entry.notes=newNotes||null;
+        entry.checkin=newCheckin||null;entry.checkout=newCheckout||null;
+        entry.meal_breakfast=newMealB;entry.meal_lunch=newMealL;entry.meal_dinner=newMealD;
+        entry.paid=newPaid;
+      }
+    });
+  });
 
   // Add new people
   const newRows=rows.filter(r=>r.dataset.id==='new'&&!r.querySelector('button[data-deleted="true"]'));
@@ -2767,14 +2821,27 @@ async function saveEditedGroup(dateStr, room){
     for(const row of newRows){
       const newName=row.querySelector('input').value.trim().toUpperCase();
       if(!newName)continue;
+      const personNewRoom=(row.querySelector('.group-edit-room-select')||{}).value||newRoom;
+      const personIsOvf=isOverflow(personNewRoom);
       const start=parseDate(newCheckin||b.checkin||dateStr);
       const end=(newCheckout||b.checkout)?parseDate(newCheckout||b.checkout):start;
       let cur=new Date(start);
       while(cur<=end&&(!(newCheckout||b.checkout)||cur<end)){
         newRecords.push({
-          name:newName,...sharedUpdate,
+          name:newName,
+          company:newCompany||null,agency:newAgency||null,
+          invoice:newInvoice||null,voucher:newVoucher,notes:newNotes||null,
+          checkin:newCheckin||null,checkout:newCheckout||null,
+          room:personNewRoom,overflow:personIsOvf,
+          meal_breakfast:newMealB,meal_lunch:newMealL,meal_dinner:newMealD,
+          guesthouse:personIsOvf?(newGuesthouse||null):null,
+          gh_cost:personIsOvf?newGhCost:null,
+          owed_paid:personIsOvf?newOwedPaid:true,
+          paid:newPaid,
           breakfast_eaten:!!(row.querySelector('.group-edit-breakfast-tick')&&row.querySelector('.group-edit-breakfast-tick').checked),
           checked_in:false,
+          dirty:false,cell:null,
+          invoice_pdf_url:null,voucher_pdf_url:null,aroma_pdf_url:null,
           booking_date:dateKey(new Date(cur)),
         });
         cur.setDate(cur.getDate()+1);
@@ -2887,6 +2954,58 @@ async function printBreakfastList(){
   setTimeout(()=>win.print(),400);
 }
 function closeModal(){document.getElementById('modal-container').innerHTML='';}
+
+// ── CUSTOM CONFIRM DIALOG ─────────────────────────────────
+function showConfirm(message, onConfirm, opts){
+  opts=opts||{};
+  var confirmLabel=opts.confirmLabel||'Delete';
+  var confirmStyle=opts.confirmStyle||'background:#dc2626;color:#fff;border:none;';
+  var icon=opts.icon||'ti-trash';
+  var iconColor=opts.iconColor||'#dc2626';
+  var div=document.createElement('div');
+  div.id='confirm-overlay';
+  div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;display:flex;align-items:center;justify-content:center;padding:20px;';
+  var cancelBtn=document.createElement('button');
+  cancelBtn.textContent='Cancel';
+  cancelBtn.style.cssText='padding:8px 18px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--text);cursor:pointer;';
+  cancelBtn.onclick=function(){div.remove();};
+  var okBtn=document.createElement('button');
+  okBtn.id='confirm-ok-btn';
+  okBtn.textContent=confirmLabel;
+  okBtn.style.cssText='padding:8px 18px;border-radius:7px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;'+confirmStyle;
+  okBtn.onclick=function(){div.remove();onConfirm();};
+  var iconEl=document.createElement('i');
+  iconEl.className='ti '+icon;
+  iconEl.style.cssText='font-size:20px;color:'+iconColor+';';
+  var iconWrap=document.createElement('div');
+  iconWrap.style.cssText='width:40px;height:40px;border-radius:8px;background:#fee2e2;display:flex;align-items:center;justify-content:center;flex-shrink:0;';
+  iconWrap.appendChild(iconEl);
+  var msgDiv=document.createElement('div');
+  msgDiv.style.cssText='font-size:13px;color:var(--muted);line-height:1.5;';
+  msgDiv.innerHTML=message;
+  var headDiv=document.createElement('div');
+  headDiv.style.cssText='font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px;';
+  headDiv.textContent='Are you sure?';
+  var textWrap=document.createElement('div');
+  textWrap.style.cssText='flex:1;';
+  textWrap.appendChild(headDiv);
+  textWrap.appendChild(msgDiv);
+  var topRow=document.createElement('div');
+  topRow.style.cssText='display:flex;align-items:flex-start;gap:14px;';
+  topRow.appendChild(iconWrap);
+  topRow.appendChild(textWrap);
+  var btnRow=document.createElement('div');
+  btnRow.style.cssText='display:flex;gap:8px;justify-content:flex-end;';
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(okBtn);
+  var card=document.createElement('div');
+  card.style.cssText='background:var(--surface);border-radius:12px;padding:24px 28px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:16px;';
+  card.appendChild(topRow);
+  card.appendChild(btnRow);
+  div.appendChild(card);
+  document.body.appendChild(div);
+  div.addEventListener('click',function(e){if(e.target===div)div.remove();});
+}
 
 // ── ADD / EDIT MODAL ──────────────────────────────────────
 function openAddModal(dateStr,room,ovf){
@@ -3234,11 +3353,20 @@ async function saveBooking(defDate,defRoom,isOvf){
       .limit(1);
     if(personConflicts&&personConflicts.length){
       const clash=personConflicts[0];
-      const confirmed=confirm(`${name} is already booked in ${clash.room} on ${formatDateStr(clash.booking_date)}.\n\nAre you sure you want to book them in ${room} as well?`);
-      if(!confirmed){
-        btn.disabled=false;btn.textContent='Save Booking';
-        return;
-      }
+      // Show custom confirm for double-booking
+      await new Promise((resolve,reject)=>{
+        showConfirm(`${name} is already booked in ${clash.room} on ${formatDateStr(clash.booking_date)}. Are you sure you want to book them in ${room} as well?`,
+          ()=>resolve(),
+          {confirmLabel:'Book Anyway',confirmStyle:'background:#d97706;color:#fff;border:none;',icon:'ti-alert-triangle',iconColor:'#d97706'});
+        // Add cancel handler
+        setTimeout(()=>{
+          const overlay=document.getElementById('confirm-overlay');
+          if(overlay){
+            const cancelBtn=overlay.querySelector('button:first-of-type');
+            if(cancelBtn){const orig=cancelBtn.onclick;cancelBtn.onclick=()=>{overlay.remove();btn.disabled=false;btn.textContent='Save Booking';reject(new Error('cancelled'));};}
+          }
+        },10);
+      }).catch(()=>{return;})
     }
   }
 
@@ -3499,8 +3627,15 @@ async function uploadPdfFromDetail(dateStr,room,type,input){
     const fileNums=(file.name.match(/\d+/g)||[]);
     const matches=fileNums.some(n=>n===typedNum||n.replace(/^0+/,'')=== typedNum.replace(/^0+/,''));
     if(!matches&&typedNum){
-      const confirmed=confirm(`Warning: The PDF filename "${file.name}" does not appear to contain invoice number ${b.invoice}.\n\nAre you sure this is the correct PDF for this invoice?`);
-      if(!confirmed)return;
+      await new Promise((resolve,reject)=>{
+      showConfirm(`The PDF filename "${file.name}" doesn't seem to match invoice ${b.invoice}. Are you sure this is the correct PDF?`,
+        ()=>resolve(),
+        {confirmLabel:'Upload Anyway',confirmStyle:'background:#d97706;color:#fff;border:none;',icon:'ti-alert-triangle',iconColor:'#d97706'});
+      setTimeout(()=>{
+        const ov=document.getElementById('confirm-overlay');
+        if(ov){const cb=ov.querySelector('button:first-of-type');if(cb){cb.onclick=()=>{ov.remove();reject(new Error('cancelled'));};}}
+      },10);
+    }).catch(()=>{return;})
     }
   }
   const isGroup=getBookings(dateStr,room).length>1;
@@ -3538,7 +3673,14 @@ async function uploadPdfFromDetail(dateStr,room,type,input){
 function drow(k,v){return `<div class="detail-field"><span class="detail-key">${k}</span><span class="detail-val">${v}</span></div>`;}
 
 async function deleteBooking(dateStr,room){
-  if(!confirm('Remove this booking? If it spans multiple nights all nights will be deleted.'))return;
+  showConfirm('Remove this booking? If it spans multiple nights, all nights will also be deleted.',async function(){
+  const b2=getBooking(dateStr,room);
+  if(!b2)return;
+  const {data:d2}=await sb.from('bookings').select('id').eq('room',room).eq('name',b2.name).gte('booking_date',b2.checkin||dateStr).lte('booking_date',b2.checkout||dateStr);
+  const ids2=(d2||[]).map(r=>r.id);
+  if(ids2.length){const ok2=await deleteBookingFromDB(ids2);if(ok2){showToast('Booking deleted');closeModal();await loadAndRender();}}
+  },{confirmLabel:'Delete Booking',confirmStyle:'background:#dc2626;color:#fff;border:none;'});
+  return;
   const b=getBooking(dateStr,room);
   if(!b)return;
   // Find all records for this booking (same name+room across checkin-checkout range)
@@ -4081,13 +4223,14 @@ async function saveAgency(editId){
 }
 
 async function deleteAgency(id,name){
-  if(!confirm(`Delete "${name}"? This will also remove it from any linked companies.`))return;
+  showConfirm(`Delete "${name}"? This will also remove it from any linked companies.`,async()=>{
   const {error}=await sb.from('agencies').delete().eq('id',id);
   if(error){showToast('Error deleting','error');return;}
   showToast('Agency deleted');
   await loadAgencies();
   await loadCompanies();
   renderAgencies();
+  },{confirmLabel:'Delete Agency'});
 }
 
 function openCompanyModal(prefillName='',editId=''){
@@ -4256,12 +4399,13 @@ async function saveCompany(editId){
 }
 
 async function deleteCompany(id,name){
-  if(!confirm(`Delete "${name}"? This won't affect existing bookings.`))return;
+  showConfirm(`Delete "${name}"? This won't affect existing bookings.`,async()=>{
   const {error}=await sb.from('companies').delete().eq('id',id);
   if(error){showToast('Error deleting','error');return;}
   showToast('Company deleted');
   await loadCompanies();
   renderCompanies();
+  },{confirmLabel:'Delete Company'});
 }
 
 // ── CLIENTS CRUD ──────────────────────────────────────────
@@ -4408,12 +4552,13 @@ async function saveClient(editId){
 }
 
 async function deleteClient(id,name){
-  if(!confirm(`Delete "${name}"? This won't affect existing bookings.`))return;
+  showConfirm(`Delete "${name}"? This won't affect existing bookings.`,async()=>{
   const {error}=await sb.from('clients').delete().eq('id',id);
   if(error){showToast('Error deleting','error');return;}
   showToast('Client deleted');
   await loadClients();
   renderClients();
+  },{confirmLabel:'Delete Client'});
 }
 
 function bookClientNow(id){
@@ -4640,12 +4785,13 @@ async function saveGuesthouse(editId){
 }
 
 async function deleteGuesthouse(id,name){
-  if(!confirm(`Delete "${name}"?`))return;
+  showConfirm(`Delete "${name}"?`,async()=>{
   const {error}=await sb.from('guesthouses').delete().eq('id',id);
   if(error){showToast('Error deleting','error');return;}
   showToast('Guesthouse deleted');
   await loadGuesthouses();
   renderGuesthouses();
+  },{confirmLabel:'Delete Guesthouse'});
 }
 
 // ── INIT ──────────────────────────────────────────────────
@@ -4905,21 +5051,24 @@ applyTheme();
 window._pdfFiles={invoice:null,voucher:null,aroma:null};
 
 function checkPdfInvoiceMatch(filename, type){
-  // Only check invoice PDFs — vouchers have different naming conventions
   if(type!=='invoice')return true;
   const invoiceInput=document.getElementById('f-invoice');
-  if(!invoiceInput||!invoiceInput.value.trim())return true; // no invoice entered yet, skip
-  // Extract number from the typed invoice field
+  if(!invoiceInput||!invoiceInput.value.trim())return true;
   const typedNum=(invoiceInput.value.trim().replace(/^IN/i,'')).replace(/\D/g,'');
-  // Extract numbers from the PDF filename
   const fileNums=(filename.match(/\d+/g)||[]);
-  // Check if any number in the filename matches the typed invoice number
   const matches=fileNums.some(n=>n===typedNum||n.replace(/^0+/,'')=== typedNum.replace(/^0+/,''));
-  if(!matches&&typedNum){
-    const confirmed=confirm(`Warning: The PDF filename "${filename}" does not appear to contain invoice number IN${typedNum}.\n\nAre you sure this is the correct PDF for this invoice?`);
-    return confirmed;
-  }
+  if(!matches&&typedNum) return 'warn';
   return true;
+}
+
+function _finishPdfSelect(type,input,file){
+  window._pdfFiles[type]=file;
+  const nameEl=document.getElementById(`${type}-pdf-name`);
+  const box=document.getElementById(`${type}-pdf-box`);
+  const removeBtn=document.getElementById(`${type}-pdf-remove`);
+  if(nameEl)nameEl.textContent=file.name;
+  if(box)box.classList.add('has-file');
+  if(removeBtn)removeBtn.style.display='flex';
 }
 
 function handlePdfSelect(type,input){
@@ -4927,11 +5076,17 @@ function handlePdfSelect(type,input){
   if(!file)return;
   if(file.type!=='application/pdf'){showToast('Please select a PDF file','error');input.value='';return;}
   if(file.size>10*1024*1024){showToast('PDF must be under 10 MB','error');input.value='';return;}
-  // Check invoice number correspondence
-  if(!checkPdfInvoiceMatch(file.name,type)){
+  const matchResult=checkPdfInvoiceMatch(file.name,type);
+  if(matchResult==='warn'){
+    const invoiceInput=document.getElementById('f-invoice');
+    const typedNum=(invoiceInput.value.trim().replace(/^IN/i,'')).replace(/\D/g,'');
+    showConfirm(`The PDF filename "${file.name}" doesn't seem to match invoice IN${typedNum}. Are you sure this is the correct PDF?`,
+      ()=>{_finishPdfSelect(type,input,file);},
+      {confirmLabel:'Upload Anyway',confirmStyle:'background:#d97706;color:#fff;border:none;',icon:'ti-alert-triangle',iconColor:'#d97706'});
     input.value='';
     return;
   }
+  if(!matchResult){input.value='';return;}
   window._pdfFiles[type]=file;
   const nameEl=document.getElementById(`${type}-pdf-name`);
   const box=document.getElementById(`${type}-pdf-box`);
@@ -5334,26 +5489,20 @@ async function markRemittanceAsPaid(remittanceId){
   const matchedInvoices=(r.invoices||[]).filter(i=>i.matched);
   if(!matchedInvoices.length){showToast('No matched invoices to mark as paid','error');return;}
 
-  if(!confirm(`Mark ${matchedInvoices.length} invoice${matchedInvoices.length!==1?'s':''} as paid?\n\n${matchedInvoices.map(i=>i.invoice_number).join(', ')}`))return;
-
-  // Get all booking IDs for matched invoices
+  const _invoiceList=matchedInvoices.map(i=>i.invoice_number).join(', ');
+  showConfirm(`Mark ${matchedInvoices.length} invoice${matchedInvoices.length!==1?'s':''} as paid? (${_invoiceList})`,async()=>{
   const invoiceNums=matchedInvoices.map(i=>i.invoice_number);
   const {data:matchedBookings,error}=await sb.from('bookings').select('id,name,invoice').in('invoice',invoiceNums);
   if(error){showToast('Error fetching bookings','error');return;}
-
   const ids=(matchedBookings||[]).map(b=>b.id);
   if(!ids.length){showToast('No bookings found for these invoices','error');return;}
-
   const {error:updateError}=await sb.from('bookings').update({paid:true}).in('id',ids);
   if(updateError){showToast('Error marking as paid: '+updateError.message,'error');return;}
-
-  // Update remittance status to completed
   await sb.from('remittances').update({status:'stamped',invoices:(r.invoices||[]).map(i=>({...i,stamped:i.matched?true:false}))}).eq('id',remittanceId);
-
   showToast(`${ids.length} booking${ids.length!==1?'s':''} marked as paid! ✓`);
   renderRemittances();
-  // Refresh calendar if visible
   if(currentView==='week'||currentView==='month') loadAndRender(true);
+  },{confirmLabel:'Mark as Paid',confirmStyle:'background:var(--accent);color:#fff;border:none;',icon:'ti-check',iconColor:'var(--accent)'});
 }
 
 async function applyRemittanceStamps(remittanceId){
@@ -5365,11 +5514,12 @@ async function applyRemittanceStamps(remittanceId){
 }
 
 async function deleteRemittance(id){
-  if(!confirm('Delete this remittance record?'))return;
+  showConfirm('Delete this remittance record?',async()=>{
   const {error}=await sb.from('remittances').delete().eq('id',id);
   if(error){showToast('Error deleting','error');return;}
   showToast('Remittance deleted');
   renderRemittances();
+  },{confirmLabel:'Delete'});
 }
 
 // ══════════════════════════════════════════════════════════
@@ -5923,11 +6073,12 @@ async function saveCashbookFund(){
 }
 
 async function deleteCashbookFund(id){
-  if(!confirm('Remove this deposit entry?'))return;
+  showConfirm('Remove this deposit entry? This cannot be undone.',async()=>{
   const {error}=await sb.from('cashbook_funds').delete().eq('id',id);
   if(error){showToast('Error deleting','error');return;}
   showToast('Entry removed');
   renderCashbook();
+  },{confirmLabel:'Remove Entry'});
 }
 
 function printCashbook(){
@@ -6032,10 +6183,9 @@ async function renderWorkerMonthlyView(){
   const endStr=`${year}-${String(month+1).padStart(2,'0')}-${String(dim).padStart(2,'0')}`;
 
   const {data:schedData}=await sb.from('weekend_schedule')
-    .select('worker_id,hours_worked,schedule_date,id,absence_type,notes')
+    .select('worker_id,hours_worked,schedule_date,id,absence_type')
     .gte('schedule_date',startStr).lte('schedule_date',endStr);
   const sched=schedData||[];
-  window._weCache={}; sched.forEach(e=>{ if(e.id) window._weCache[e.id]=e.notes||''; });
 
   const days=[];
   for(let n=1;n<=dim;n++) days.push(new Date(year,month,n));
@@ -6201,8 +6351,10 @@ function openWorkerModal(editId=''){
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div class="form-group full"><label class="form-label">Full Name *</label>
-            <input class="form-input" id="fw-name" placeholder="e.g. Maria Mokoena" value="${w?w.name:''}" /></div>
+          <div class="form-group full"><label class="form-label">First Name *</label>
+            <input class="form-input" id="fw-name" placeholder="e.g. Maria" value="${w?w.name:''}" /></div>
+          <div class="form-group full"><label class="form-label">Surname</label>
+            <input class="form-input" id="fw-surname" placeholder="e.g. Mokoena" value="${w&&w.surname?w.surname:''}" /></div>
           <div class="form-group full"><label class="form-label">Role</label>
             <input class="form-input" id="fw-role" placeholder="e.g. Housekeeper, Cook" value="${w&&w.role?w.role:''}" /></div>
           <div class="form-group full"><label class="form-label">Phone</label>
@@ -6226,7 +6378,8 @@ async function saveWorker(editId){
   if(!name){showToast('Please enter worker name','error');return;}
   const btn=document.getElementById('fw-save');
   btn.disabled=true;btn.textContent='Saving...';
-  const payload={name,role:document.getElementById('fw-role').value.trim()||null,phone:document.getElementById('fw-phone').value.trim()||null,hourly_rate:parseFloat(document.getElementById('fw-rate').value)||null};
+  const surname=uc(document.getElementById('fw-surname').value.trim());
+  const payload={name,surname:surname||null,role:document.getElementById('fw-role').value.trim()||null,phone:document.getElementById('fw-phone').value.trim()||null,hourly_rate:parseFloat(document.getElementById('fw-rate').value)||null};
   let error;
   if(editId){({error}=await sb.from('workers').update(payload).eq('id',editId));}
   else{({error}=await sb.from('workers').insert(payload));}
@@ -6239,12 +6392,13 @@ async function saveWorker(editId){
 }
 
 async function deleteWorker(id,name){
-  if(!confirm(`Remove "${name}" from workers?`))return;
+  showConfirm(`Remove "${name}" from workers?`,async()=>{
   await sb.from('workers').update({active:false}).eq('id',id);
   showToast('Worker removed');
   await loadWorkers();
   renderWorkersGrid();
   renderWorkerMonthlyView();
+  },{confirmLabel:'Remove Worker',confirmStyle:'background:#92400e;color:#fff;border:none;',icon:'ti-user-minus',iconColor:'#92400e'});
 }
 
 // ── WEEKEND PLANNER MODAL ─────────────────────────────────
@@ -6439,43 +6593,8 @@ async function saveWeekendWorkers(){
   openAssignWeekendModal();
 }
 
-function parseTimesFromNotes(notes){
-  if(!notes)return{start:'',end:''};
-  const m=notes.match(/^(\d{2}:\d{2})\u2013(\d{2}:\d{2})/);
-  if(m)return{start:m[1],end:m[2]};
-  const m2=notes.match(/Start: (\d{2}:\d{2})/);
-  if(m2)return{start:m2[1],end:''};
-  return{start:'',end:''};
-}
-
-function calcWeekendHours(){
-  const s=document.getElementById('wh-start').value;
-  const e=document.getElementById('wh-end').value;
-  const hrsEl=document.getElementById('wh-hrs');
-  const calcEl=document.getElementById('wh-calc');
-  if(s&&e){
-    const [sh,sm]=s.split(':').map(Number);
-    let [eh,em]=e.split(':').map(Number);
-    let diff=(eh*60+em)-(sh*60+sm);
-    if(diff<0)diff+=24*60;
-    const hrs=Math.round(diff/60*100)/100;
-    hrsEl.value=hrs>0?hrs:'';
-    if(calcEl)calcEl.textContent=hrs>0?`= ${hrs} hrs`:'';
-  } else {
-    if(calcEl)calcEl.textContent='';
-  }
-}
-
 function addWeekendHours(dateStr,workerId,workerName){
   const w=workers.find(x=>x.id===workerId);
-  const otherWorkers=workers.filter(x=>x.id!==workerId);
-  const copyRow=otherWorkers.length>0?`
-    <div class="form-group full" style="margin-top:4px;">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);">
-        <input type="checkbox" id="wh-copy" checked style="width:15px;height:15px;accent-color:var(--accent);" />
-        Copy hours to other workers this weekend
-      </label>
-    </div>`:'';
   document.getElementById('modal-container').innerHTML=`
     <div class="modal-backdrop">
       <div class="modal" style="max-width:360px;">
@@ -6485,19 +6604,12 @@ function addWeekendHours(dateStr,workerId,workerName){
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-            <div class="form-group full" style="margin:0"><label class="form-label">Start Time</label>
-              <input class="form-input" id="wh-start" type="time" oninput="calcWeekendHours()" autofocus /></div>
-            <div class="form-group full" style="margin:0"><label class="form-label">End Time</label>
-              <input class="form-input" id="wh-end" type="time" oninput="calcWeekendHours()" /></div>
-          </div>
-          <div class="form-group full"><label class="form-label">Hours Worked <span id="wh-calc" style="font-size:11px;color:var(--accent);margin-left:6px;font-weight:600;"></span></label>
-            <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" placeholder="e.g. 8" />
+          <div class="form-group full"><label class="form-label">Hours Worked</label>
+            <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" placeholder="e.g. 8" autofocus />
             ${w&&w.hourly_rate?`<div style="font-size:11px;color:var(--accent);margin-top:3px;">R ${parseFloat(w.hourly_rate).toFixed(2)}/hr</div>`:''}
           </div>
           <div class="form-group full"><label class="form-label">Notes</label>
             <input class="form-input" id="wh-notes" placeholder="Optional..." /></div>
-          ${copyRow}
         </div>
         <div class="modal-footer">
           <button class="btn-secondary" onclick="closeModal()">Cancel</button>
@@ -6505,123 +6617,55 @@ function addWeekendHours(dateStr,workerId,workerName){
         </div>
       </div>
     </div>`;
-  setTimeout(()=>{ const el=document.getElementById('wh-start'); if(el)el.focus(); },50);
+  setTimeout(()=>{ const el=document.getElementById('wh-hrs'); if(el)el.focus(); },50);
 }
 
 async function saveWeekendHours(dateStr,workerId){
   const hrs=parseFloat(document.getElementById('wh-hrs').value)||null;
-  const startT=document.getElementById('wh-start')?.value||null;
-  const endT=document.getElementById('wh-end')?.value||null;
-  const notesInput=document.getElementById('wh-notes').value.trim();
-  const timePart=startT&&endT?`${startT}–${endT}`:startT?`Start: ${startT}`:'';
-  const notes=[timePart,notesInput].filter(Boolean).join(' · ')||null;
-  const copyOthers=document.getElementById('wh-copy')?.checked||false;
+  const notes=document.getElementById('wh-notes').value.trim()||null;
   const btn=document.getElementById('wh-save');
   btn.disabled=true;btn.textContent='Saving...';
-
-  // Save for this worker
   const {error}=await sb.from('weekend_schedule').insert({worker_id:workerId,schedule_date:dateStr,hours_worked:hrs,notes});
   if(error){showToast('Error: '+error.message,'error');btn.disabled=false;btn.textContent='Save Hours';return;}
-
-  // Copy to other workers on the same weekend if requested
-  if(copyOthers&&hrs){
-    // Determine the weekend's Sat+Sun dates
-    // Only copy to other workers on the same date (not the partner Sat/Sun)
-    const otherWorkerIds=workers.filter(w=>w.id!==workerId).map(w=>w.id);
-    if(otherWorkerIds.length){
-      const {data:existing}=await sb.from('weekend_schedule')
-        .select('id,worker_id,schedule_date,hours_worked')
-        .eq('schedule_date',dateStr)
-        .in('worker_id',otherWorkerIds)
-        .is('absence_type',null);
-      const existingEntries=existing||[];
-      const toUpdate=existingEntries.filter(e=>!e.hours_worked||e.hours_worked===0);
-      for(const e of toUpdate){
-        await sb.from('weekend_schedule').update({hours_worked:hrs}).eq('id',e.id);
-      }
-    }
-  }
-
-  showToast('Hours saved!'+(copyOthers&&hrs?' (copied to other workers)':''));
+  showToast('Hours saved!');
   closeModal();
   renderWorkerMonthlyView();
 }
 
 function editWeekendHours(entryId,dateStr,workerId,workerName,currentHrs){
-  const {start:startTime,end:endTime}=parseTimesFromNotes((window._weCache&&window._weCache[entryId])||'');
   const w=workers.find(x=>x.id===workerId);
   const isPending=!currentHrs||currentHrs===0;
-  const otherWorkers=workers.filter(x=>x.id!==workerId);
-  const copyRow=otherWorkers.length>0?`
-    <div class="form-group full" style="margin-top:4px;">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);">
-        <input type="checkbox" id="wh-copy" checked style="width:15px;height:15px;accent-color:var(--accent);" />
-        Copy hours to other workers this weekend
-      </label>
-    </div>`:'';
-  const rateHtml=w&&w.hourly_rate?`<div style="font-size:11px;color:var(--accent);margin-top:3px;">R ${parseFloat(w.hourly_rate).toFixed(2)}/hr</div>`:'';
   document.getElementById('modal-container').innerHTML=`
     <div class="modal-backdrop">
       <div class="modal" style="max-width:360px;">
         <div class="modal-header" style="background:var(--overflow-head);border-bottom-color:var(--overflow-border);">
           <div><div class="modal-title" style="color:var(--overflow-text);">${isPending?'Enter Hours Worked':'Edit Hours'}</div>
-          <div class="modal-subtitle">${workerName} \xb7 ${formatDateStr(dateStr)}</div></div>
-          <button class="modal-close" onclick="closeModal()">&#x2715;</button>
+          <div class="modal-subtitle">${workerName} · ${formatDateStr(dateStr)}</div></div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-            <div class="form-group full" style="margin:0"><label class="form-label">Start Time</label>
-              <input class="form-input" id="wh-start" type="time" value="${startTime||''}" oninput="calcWeekendHours()" /></div>
-            <div class="form-group full" style="margin:0"><label class="form-label">End Time</label>
-              <input class="form-input" id="wh-end" type="time" value="${endTime||''}" oninput="calcWeekendHours()" /></div>
-          </div>
-          <div class="form-group full"><label class="form-label">Hours Worked <span id="wh-calc" style="font-size:11px;color:var(--accent);margin-left:6px;font-weight:600;"></span></label>
+          <div class="form-group full"><label class="form-label">Hours Worked</label>
             <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" value="${isPending?'':currentHrs}" placeholder="e.g. 6" />
-            ${rateHtml}
+            ${w&&w.hourly_rate?`<div style="font-size:11px;color:var(--accent);margin-top:3px;">R ${parseFloat(w.hourly_rate).toFixed(2)}/hr</div>`:''}
           </div>
-          ${copyRow}
         </div>
         <div class="modal-footer">
           <button class="btn-danger" onclick="deleteWeekendHours('${entryId}')"><i class="ti ti-trash"></i> Remove</button>
           <button class="btn-secondary" onclick="closeModal()">Cancel</button>
-          <button class="btn-primary" id="wh-save" onclick="updateWeekendHours('${entryId}','${dateStr}','${workerId}')" style="background:var(--overflow-border);">Save Hours</button>
+          <button class="btn-primary" id="wh-save" onclick="updateWeekendHours('${entryId}')" style="background:var(--overflow-border);">Save Hours</button>
         </div>
       </div>
     </div>`;
-  setTimeout(()=>{ const el=document.getElementById('wh-start'); if(el)el.focus(); },50);
+  setTimeout(()=>{ const el=document.getElementById('wh-hrs'); if(el){el.focus();if(!isPending)el.select();} },50);
 }
 
-async function updateWeekendHours(entryId,dateStr,workerId){
+async function updateWeekendHours(entryId){
   const hrs=parseFloat(document.getElementById('wh-hrs').value)||null;
-  const startT=document.getElementById('wh-start')?.value||null;
-  const endT=document.getElementById('wh-end')?.value||null;
-  const timePart=startT&&endT?`${startT}\u2013${endT}`:startT?`Start: ${startT}`:'';
-  const notes=timePart||null;
-  const copyOthers=document.getElementById('wh-copy')?.checked||false;
   const btn=document.getElementById('wh-save');
   btn.disabled=true;btn.textContent='Saving...';
-
-  const {error}=await sb.from('weekend_schedule').update({hours_worked:hrs,notes}).eq('id',entryId);
+  const {error}=await sb.from('weekend_schedule').update({hours_worked:hrs}).eq('id',entryId);
   if(error){showToast('Error: '+error.message,'error');btn.disabled=false;btn.textContent='Update';return;}
-
-  // Copy to other workers on the same weekend if requested
-  if(copyOthers&&hrs&&dateStr&&workerId){
-    // Only copy to other workers on the same date (not the partner Sat/Sun)
-    const otherWorkerIds=workers.filter(w=>w.id!==workerId).map(w=>w.id);
-    if(otherWorkerIds.length){
-      const {data:existing}=await sb.from('weekend_schedule')
-        .select('id,worker_id,schedule_date,hours_worked')
-        .eq('schedule_date',dateStr)
-        .in('worker_id',otherWorkerIds)
-        .is('absence_type',null);
-      const existingEntries=existing||[];
-      for(const e of existingEntries){
-        await sb.from('weekend_schedule').update({hours_worked:hrs,notes}).eq('id',e.id);
-      }
-    }
-  }
-
-  showToast('Hours updated!'+(copyOthers&&hrs?' (copied to other workers)':''));
+  showToast('Hours updated!');
   closeModal();
   renderWorkerMonthlyView();
 }
@@ -7104,57 +7148,13 @@ function renderSalarySummary(){renderWorkerMonthlyView();}
 
 <script>
 // ── SIMPLEPAY CONFIG ──────────────────────────────────────
-const SP_API_KEY = '3c8e1c01643b37eb7d65ebf06dbb9432';
-const SP_BASE    = 'https://api.payroll.simplepay.cloud/v1';
-const SP_HEADERS = {'Content-Type':'application/json','Authorization':SP_API_KEY};
-
-// Call SimplePay via Supabase Edge Function proxy (avoids CORS)
-async function spFetch(path, options={}){
-  const method = options.method||'GET';
-  const body = options.body||null;
-  const proxyUrl = `${SUPABASE_URL}/functions/v1/simplepay-proxy`;
-
-  let res;
-  try {
-    res = await fetch(proxyUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'apikey': SUPABASE_KEY
-      },
-      body: JSON.stringify({ path, method, body, apiKey: SP_API_KEY })
-    });
-  } catch(e) {
-    throw new Error('Could not reach the SimplePay proxy. Make sure the edge function is deployed in Supabase.');
-  }
-
-  const txt = await res.text();
-  let parsed;
-  try { parsed = JSON.parse(txt); } catch(e) {
-    throw new Error(`Unexpected proxy response (${res.status}): ${txt.slice(0,300)}`);
-  }
-
-  if(!res.ok){
-    throw new Error(`Proxy error ${res.status}: ${JSON.stringify(parsed).slice(0,200)}`);
-  }
-
-  // Support both envelope format {ok,status,data} and raw passthrough
-  if(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'data' in parsed && 'status' in parsed){
-    // New envelope format
-    if(!parsed.ok){
-      const spStatus = parsed.status;
-      const errMsg = parsed.error || JSON.stringify(parsed.data||'');
-      if(spStatus === 401 || spStatus === 403){
-        throw new Error(`SimplePay API key rejected (${spStatus}). Check your API key is correct and active.`);
-      }
-      throw new Error(`SimplePay error ${spStatus}: ${errMsg}`);
-    }
-    return parsed.data;
-  }
-
-  // Raw passthrough (old edge function or direct array/object from SimplePay)
-  return parsed;
+async function spFetch(path, method='GET', body=null){
+  const { data, error } = await sb.functions.invoke('simplepay-proxy', {
+    body: { path, method, body }
+  });
+  if(error) throw new Error(error.message||'Edge function error');
+  if(data && data.__sp_error) throw new Error(data.__sp_error);
+  return data;
 }
 
 let spMonth = new Date();
@@ -7259,18 +7259,18 @@ async function spLoadPreview(){
   status.textContent='';
 
   try{
-    // 1. Make sure workers are loaded
-    if(!workers.length) await loadWorkers();
+    // 1. Always reload workers to get latest surnames
+    await loadWorkers();
 
     // 2. Fetch SimplePay clients
-    const clientData = await spFetch('/clients/');
-    if(!clientData.length) throw new Error('No clients found on SimplePay account.');
+    const clientData=await spFetch('/clients/');
+    if(!Array.isArray(clientData)||!clientData.length) throw new Error('No clients found on SimplePay account.');
     spClientId=clientData[0].client.id;
     const clientName=clientData[0].client.name||'Unknown';
 
     // 3. Fetch SimplePay employees for this client
-    const empData = await spFetch(`/employees/?client_id=${spClientId}`);
-    spEmployees=empData.map(e=>e.employee||e);
+    const empData=await spFetch(`/clients/${spClientId}/employees`);
+    spEmployees=(Array.isArray(empData)?empData:[]).map(e=>e.employee||e);
 
     // 4. Compute hours from GuestBook workers page
     const year=spMonth.getFullYear(), month=spMonth.getMonth();
@@ -7278,11 +7278,19 @@ async function spLoadPreview(){
 
     // 5. Match GuestBook workers → SimplePay employees (by name, case-insensitive)
     spPreviewData=computed.map(row=>{
-      const wName=row.worker.name.trim().toLowerCase();
+      const w=row.worker;
+      const firstName=(w.name||'').trim().toLowerCase();
+      const surname=(w.surname||'').trim().toLowerCase();
+      const fullName=surname?`${firstName} ${surname}`:firstName;
       const matched=spEmployees.find(e=>{
-        const full=((e.first_name||'')+' '+(e.last_name||'')).trim().toLowerCase();
-        const display=(e.display_name||'').trim().toLowerCase();
-        return full===wName||display===wName||full.includes(wName)||wName.includes(full);
+        const spFirst=(e.first_name||'').trim().toLowerCase();
+        const spLast=(e.last_name||'').trim().toLowerCase();
+        const spFull=`${spFirst} ${spLast}`.trim();
+        const spDisplay=(e.display_name||'').trim().toLowerCase();
+        if(surname){
+          return (spFirst===firstName && spLast===surname) || spFull===fullName || spDisplay===fullName;
+        }
+        return spFull===fullName||spDisplay===fullName||spFull.includes(fullName)||fullName.includes(spFirst);
       })||null;
       return {...row, spEmployee:matched};
     });
@@ -7358,10 +7366,9 @@ async function spLoadPreview(){
     status.innerHTML=`<span style="color:var(--accent);">✓ Loaded ${spPreviewData.length} workers · ${spEmployees.length} SimplePay employees found</span>`;
 
   } catch(err){
-    const msg = err.message.replace(/\n/g,'<br>');
     preview.innerHTML=`<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:14px 16px;color:#9b1c1c;font-size:13px;display:flex;align-items:flex-start;gap:10px;">
-      <i class="ti ti-alert-circle" style="font-size:20px;flex-shrink:0;margin-top:2px;"></i>
-      <div><strong>Error loading data</strong><br><br>${msg}</div>
+      <i class="ti ti-alert-circle" style="font-size:20px;flex-shrink:0;"></i>
+      <div><strong>Error loading data</strong><br>${err.message}</div>
     </div>`;
     status.textContent='';
   }
@@ -7376,8 +7383,12 @@ async function spSubmitToSimplePay(){
   if(!matched.length){showToast('No matched workers to submit','error');return;}
 
   const monthName=`${MONTHS[spMonth.getMonth()]} ${spMonth.getFullYear()}`;
-  if(!confirm(`Submit payroll for ${matched.length} worker(s) for ${monthName} to SimplePay?\n\nThis will update their basic salary amounts on SimplePay.`))return;
-
+  showConfirm(`Submit payroll for ${matched.length} worker(s) for ${monthName} to SimplePay? This will update their basic salary amounts.`,()=>{
+  _doSpSubmit(btn,status,matched,monthName);
+  },{confirmLabel:'Submit to SimplePay',confirmStyle:'background:var(--accent);color:#fff;border:none;',icon:'ti-cloud-upload',iconColor:'var(--accent)'});
+  return;
+}
+async function _doSpSubmit(btn,status,matched,monthName){
   btn.disabled=true;btn.style.opacity='.6';
   btn.innerHTML='<div class="loader-spinner" style="width:14px;height:14px;border-width:2px;margin-right:4px;"></div> Submitting…';
   status.textContent='';
@@ -7391,12 +7402,9 @@ async function spSubmitToSimplePay(){
       }
     }));
 
-    const body = await spFetch(`/clients/${spClientId}/bulk_input`,{
-      method:'POST',
-      body:JSON.stringify({entities})
-    });
+    const body=await spFetch(`/clients/${spClientId}/bulk_input`,'POST',{entities});
 
-    if(body!==null){
+    if(body && !body.__sp_error){
       showToast(`✓ ${matched.length} worker(s) submitted to SimplePay!`,'success');
       status.innerHTML=`<span style="color:var(--accent);font-weight:600;">✓ Successfully submitted ${matched.length} worker(s) for ${monthName}</span>`;
 
@@ -7424,7 +7432,7 @@ async function spSubmitToSimplePay(){
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">${resultRows}</div>`;
     } else {
-      const msg=body.message||body.error||JSON.stringify(body)||`HTTP ${res.status}`;
+      const msg=(body&&(body.message||body.error||JSON.stringify(body)))||'Submission failed';
       throw new Error(msg);
     }
   } catch(err){
