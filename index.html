@@ -218,6 +218,19 @@ body.dark .tag-noshow{background:#1e293b;color:#94a3b8;border-color:#475569;}
 .checkin-tick.ticked{background:var(--accent);border-color:var(--accent);color:#fff;}
 .checkin-tick:hover{border-color:var(--accent);}
 .cell.overflow-empty:hover .cell-add{color:var(--overflow-border);}
+/* BLOCKED ROOMS */
+.cell.blocked{background:repeating-linear-gradient(135deg,#f3f4f6,#f3f4f6 6px,#e5e7eb 6px,#e5e7eb 12px);border:1.5px solid #9ca3af;cursor:pointer;opacity:.85;}
+body.dark .cell.blocked{background:repeating-linear-gradient(135deg,#1f2937,#1f2937 6px,#374151 6px,#374151 12px);border-color:#6b7280;}
+.cell.blocked:hover{border-color:#ef4444;opacity:1;}
+.cell-blocked-content{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100px;gap:6px;color:#6b7280;}
+body.dark .cell-blocked-content{color:#9ca3af;}
+.cell-blocked-content i{font-size:20px;opacity:.6;}
+.cell-blocked-content .blocked-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+.cell-blocked-content .blocked-reason{font-size:10px;color:#9ca3af;text-align:center;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mcell.blocked{background:repeating-linear-gradient(135deg,#f3f4f6,#f3f4f6 4px,#e5e7eb 4px,#e5e7eb 8px);border:1.5px solid #9ca3af;cursor:pointer;}
+body.dark .mcell.blocked{background:repeating-linear-gradient(135deg,#1f2937,#1f2937 4px,#374151 4px,#374151 8px);border-color:#6b7280;}
+.mcell.blocked:hover{border-color:#ef4444;}
+.ld-blocked{background:repeating-linear-gradient(135deg,#f3f4f6,#f3f4f6 4px,#e5e7eb 4px,#e5e7eb 8px);border:1px solid #9ca3af;}
 .month-room-head{padding:5px 4px;font-size:11px;font-weight:500;color:var(--muted);font-family:var(--mono);text-align:center;white-space:nowrap;min-width:44px;background:var(--bg);position:sticky;top:0;z-index:2;}
 .month-room-head.corner{position:sticky;left:0;top:0;z-index:4;background:var(--bg);}
 .month-room-head.overflow-head{color:var(--overflow-text);background:var(--overflow-head);border-radius:3px;}
@@ -643,6 +656,7 @@ input,select,textarea{font-size:16px;}
     <div class="legend-item"><div class="legend-dot ld-dirty"></div> Needs cleaning</div>
     <div class="legend-item"><div class="legend-dot ld-unpaid"></div> Unpaid</div>
     <div class="legend-item"><div class="legend-dot ld-overflow"></div> Overflow (external)</div>
+    <div class="legend-item"><div class="legend-dot ld-blocked"></div> Blocked</div>
   </div>
   <div class="grid-container" id="grid-container"></div>
 </div>
@@ -785,6 +799,14 @@ const MONTHS=['January','February','March','April','May','June','July','August',
 
 let currentView='week', currentDate=new Date(), bookings={}, searchTerm='', companies=[], agencies=[], clients=[], guesthouses=[], workers=[];
 let _appStarted=false;
+// Blocked rooms: key = "date__room", value = {reason, blockedAt}
+let blockedRooms={};
+function loadBlockedRooms(){try{blockedRooms=JSON.parse(localStorage.getItem('gb_blocked_rooms')||'{}');}catch(e){blockedRooms={};}}
+function saveBlockedRooms(){try{localStorage.setItem('gb_blocked_rooms',JSON.stringify(blockedRooms));}catch(e){}}
+function isRoomBlocked(dateStr,room){return !!(blockedRooms[`${dateStr}__${room}`]);}
+function getBlockedReason(dateStr,room){return (blockedRooms[`${dateStr}__${room}`]||{}).reason||'';}
+function blockRoom(dateStr,room,reason){blockedRooms[`${dateStr}__${room}`]={reason:reason||'',blockedAt:new Date().toISOString()};saveBlockedRooms();}
+function unblockRoom(dateStr,room){delete blockedRooms[`${dateStr}__${room}`];saveBlockedRooms();}
 
 // ── HELPERS ──────────────────────────────────────────────
 function dateKey(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
@@ -1275,6 +1297,53 @@ function getBookings(dateStr, room){
 function isGroupCell(dateStr, room){
   return (bookings[`${dateStr}__${room}`]||[]).length>1;
 }
+
+// ── ROOM AVAILABILITY HELPERS ─────────────────────────────
+// Bookings are stored one record per day per room (key = booking_date__room).
+// Occupied = any existing key whose booking_date falls within [checkin, checkout).
+function getOccupiedRoomsForDates(checkinStr,checkoutStr,excludeRoom){
+  const occupied=new Set();
+  if(!checkinStr)return occupied;
+  // Build the set of date strings in the requested stay
+  const dates=new Set();
+  const cur=new Date(checkinStr+'T00:00:00');
+  const end=checkoutStr&&checkoutStr!==checkinStr?new Date(checkoutStr+'T00:00:00'):new Date(checkinStr+'T00:00:00');
+  if(!checkoutStr||checkoutStr===checkinStr){
+    dates.add(checkinStr);
+  } else {
+    const c2=new Date(cur);
+    while(c2<end){dates.add(dateKey(c2));c2.setDate(c2.getDate()+1);}
+  }
+  for(const key of Object.keys(bookings)){
+    const arr=bookings[key];
+    if(!arr||!arr.length)continue;
+    const sep=key.indexOf('__');
+    if(sep<0)continue;
+    const bookingDate=key.slice(0,sep);
+    const room=key.slice(sep+2);
+    if(excludeRoom&&room===excludeRoom)continue;
+    if(dates.has(bookingDate))occupied.add(room);
+  }
+  return occupied;
+}
+function buildRoomOptionHtml(selectedRoom,occupied){
+  return ALL_ROOMS.map(r=>{
+    const isOcc=occupied&&occupied.has(r)&&r!==selectedRoom;
+    return `<option value="${r}"${r===selectedRoom?' selected':''}${isOcc?' disabled':''} style="${isOcc?'color:#9ca3af;':''}">` +
+      (isOcc?`${r} \u2014 occupied`:`${r}`) + `</option>`;
+  }).join('');
+}
+function refreshRoomSelects(listSel,ciId,coId,excludeRoom){
+  const ci=(document.getElementById(ciId)||{}).value||'';
+  const co=(document.getElementById(coId)||{}).value||'';
+  const occupied=getOccupiedRoomsForDates(ci,co,excludeRoom);
+  document.querySelectorAll(listSel).forEach(sel=>{
+    const cur=sel.value;
+    sel.innerHTML=buildRoomOptionHtml(cur,occupied);
+    if(cur)sel.value=cur;
+  });
+}
+
 // ── RENDER WEEK ───────────────────────────────────────────
 function renderWeek(){
   const ws=getWeekStart(new Date(currentDate));
@@ -1379,7 +1448,18 @@ function renderWeek(){
       } else if(b&&!match){
         html+=`<td class="cell${ovf?' overflow-cell':''}" style="opacity:.25" title="${cellTip}"></td>`;
       } else {
-        html+=`<td class="cell${ovf?' overflow-empty':''}" onclick="openAddModal('${dStr}','${room}',${ovf})" title="${cellTip}"><div class="cell-add">+</div></td>`;
+        if(isRoomBlocked(dStr,room)){
+          const reason=getBlockedReason(dStr,room);
+          html+=`<td class="cell blocked" onclick="openUnblockModal('${dStr}','${room}')" title="${cellTip} — BLOCKED${reason?' · '+reason:''}">
+            <div class="cell-blocked-content">
+              <i class="ti ti-ban"></i>
+              <div class="blocked-label">Blocked</div>
+              ${reason?`<div class="blocked-reason">${reason}</div>`:''}
+            </div>
+          </td>`;
+        } else {
+          html+=`<td class="cell${ovf?' overflow-empty':''}" onclick="openAddModal('${dStr}','${room}',${ovf})" title="${cellTip}"><div class="cell-add"><span style="font-size:14px;display:flex;flex-direction:column;align-items:center;gap:4px;"><span style="font-size:26px;line-height:1;color:var(--border)">+</span><span style="font-size:10px;color:var(--border);font-weight:500;letter-spacing:.3px;opacity:0;transition:opacity .15s;" class="block-hint">or block</span></span></div></td>`;
+        }
       }
     });
     // ── No Show columns ──────────────────────────────────────
@@ -1461,7 +1541,12 @@ function renderMonth(){
       } else if(b&&!match){
         html+=`<td class="mcell${ovf?' overflow-cell':''}" style="opacity:.25" title="${cellTip}"></td>`;
       } else {
-        html+=`<td class="mcell${ovf?' overflow-empty':''}" onclick="openAddModal('${dStr}','${room}',${ovf})" title="${cellTip}"></td>`;
+        if(isRoomBlocked(dStr,room)){
+          const reason=getBlockedReason(dStr,room);
+          html+=`<td class="mcell blocked" onclick="openUnblockModal('${dStr}','${room}')" title="${cellTip} — BLOCKED${reason?' · '+reason:''}"><div style="display:flex;align-items:center;justify-content:center;height:100%;"><i class="ti ti-ban" style="font-size:13px;color:#9ca3af;"></i></div></td>`;
+        } else {
+          html+=`<td class="mcell${ovf?' overflow-empty':''}" onclick="openAddModal('${dStr}','${room}',${ovf})" title="${cellTip}"></td>`;
+        }
       }
     });
     // ── No Show columns (month view) ────────────────────────
@@ -1541,7 +1626,8 @@ function switchToGroupBooking(dateStr, room){
 }
 
 function openGroupBookingModal(dateStr, room){
-  const roomOptions=ALL_ROOMS.map(r=>`<option value="${r}"${r===room?' selected':''}>${r}</option>`).join('');
+  const _occupied=getOccupiedRoomsForDates(dateStr,'',null);
+  const roomOptions=buildRoomOptionHtml(room,_occupied);
   const html=`<div class="modal-backdrop">
     <div class="modal" style="max-width:600px;">
       <div class="modal-header overflow-header">
@@ -1562,13 +1648,13 @@ function openGroupBookingModal(dateStr, room){
           <div class="group-names-list" id="group-names-list">
             <div class="group-name-row" data-idx="0" style="display:grid;grid-template-columns:1fr 120px auto auto;gap:6px;align-items:center;">
               <input type="text" placeholder="Person 1 — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,0)" />
-              <select class="form-input group-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleGroupGuesthouseSection()">${ALL_ROOMS.map(r=>`<option value="${r}"${r===room?' selected':''}>${r}</option>`).join('')}</select>
+              <select class="form-input group-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleGroupGuesthouseSection()">${buildRoomOptionHtml(room,_occupied)}</select>
               <input type="checkbox" class="group-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" onchange="calcGroupMealTotal()" />
               <button class="group-name-remove" onclick="removeGroupName(0)" title="Remove">✕</button>
             </div>
             <div class="group-name-row" data-idx="1" style="display:grid;grid-template-columns:1fr 120px auto auto;gap:6px;align-items:center;">
               <input type="text" placeholder="Person 2 — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,1)" />
-              <select class="form-input group-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleGroupGuesthouseSection()">${ALL_ROOMS.map(r=>`<option value="${r}"${r===room?' selected':''}>${r}</option>`).join('')}</select>
+              <select class="form-input group-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleGroupGuesthouseSection()">${buildRoomOptionHtml(room,_occupied)}</select>
               <input type="checkbox" class="group-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" onchange="calcGroupMealTotal()" />
               <button class="group-name-remove" onclick="removeGroupName(1)" title="Remove">✕</button>
             </div>
@@ -1614,8 +1700,8 @@ function openGroupBookingModal(dateStr, room){
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Check-in Date *</label><input class="form-input" id="fg-checkin" type="date" value="${dateStr||''}" oninput="calcGroupGhTotal();calcGroupMealTotal();calcGroupAgencyIncome()" /></div>
-          <div class="form-group"><label class="form-label">Check-out Date</label><input class="form-input" id="fg-checkout" type="date" oninput="calcGroupGhTotal();calcGroupMealTotal();calcGroupAgencyIncome()" /></div>
+          <div class="form-group"><label class="form-label">Check-in Date *</label><input class="form-input" id="fg-checkin" type="date" value="${dateStr||''}" oninput="calcGroupGhTotal();calcGroupMealTotal();calcGroupAgencyIncome();refreshRoomSelects('#group-names-list .group-room-select, #fg-room','fg-checkin','fg-checkout',null)" /></div>
+          <div class="form-group"><label class="form-label">Check-out Date</label><input class="form-input" id="fg-checkout" type="date" oninput="calcGroupGhTotal();calcGroupMealTotal();calcGroupAgencyIncome();refreshRoomSelects('#group-names-list .group-room-select, #fg-room','fg-checkin','fg-checkout',null)" /></div>
         </div>
 
         <!-- AGENCY INCOME -->
@@ -1714,7 +1800,10 @@ function addGroupNameRow(){
   row.style.alignItems='center';
   // Default room = whatever the default room selector currently says
   const defRoom=(document.getElementById('fg-room')||{}).value||ALL_ROOMS[0];
-  const roomOpts=ALL_ROOMS.map(r=>`<option value="${r}"${r===defRoom?' selected':''}>${r}</option>`).join('');
+  const ci=(document.getElementById('fg-checkin')||{}).value||'';
+  const co=(document.getElementById('fg-checkout')||{}).value||'';
+  const _occ=getOccupiedRoomsForDates(ci,co,null);
+  const roomOpts=buildRoomOptionHtml(defRoom,_occ);
   row.innerHTML=`<input type="text" placeholder="Person ${idx+1} — First & Last Name" class="group-name-input" autocomplete="off" oninput="updateGroupSummary()" onkeydown="groupNameKey(event,${idx})" /><select class="form-input group-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleGroupGuesthouseSection()">${roomOpts}</select><input type="checkbox" class="group-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" onchange="calcGroupMealTotal()" /><button class="group-name-remove" onclick="removeGroupName(${idx})" title="Remove">✕</button>`;
   list.appendChild(row);
   row.querySelector('input').focus();
@@ -2547,15 +2636,16 @@ function openEditGroupModal(dateStr, room){
   const b=bArr[0];
   const ovf=!!(b.overflow||isOverflow(room));
 
+  const _editOccupied=getOccupiedRoomsForDates(b.checkin||dateStr, b.checkout||'', room);
   const memberRows=bArr.map((person,i)=>`
     <div class="group-name-row" data-id="${person.id}" style="display:grid;grid-template-columns:1fr 110px auto auto;gap:6px;align-items:center;">
       <input type="text" class="group-edit-name-input form-input" value="${person.name}" placeholder="First & Last Name" style="font-size:13px;" />
-      <select class="form-input group-edit-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleEditGroupGuesthouseSection()">${ALL_ROOMS.map(r=>`<option value="${r}"${r===(person.room||room)?' selected':''}>${r}</option>`).join('')}</select>
+      <select class="form-input group-edit-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleEditGroupGuesthouseSection()">${buildRoomOptionHtml(person.room||room,_editOccupied)}</select>
       <input type="checkbox" class="group-edit-breakfast-tick" title="Ate breakfast physically" ${person.breakfast_eaten?'checked':''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" />
       <button class="group-name-remove" onclick="markGroupPersonDeleted(this)" title="Remove person" style="${person.checked_in?'opacity:.4;cursor:not-allowed;':''}" ${person.checked_in?'disabled title="Cannot remove — already checked in"':''}>✕</button>
     </div>`).join('');
 
-  const roomOptions=ALL_ROOMS.map(r=>`<option value="${r}"${r===room?' selected':''}>${r}</option>`).join('');
+  const roomOptions=buildRoomOptionHtml(room,_editOccupied);
 
   document.getElementById('modal-container').innerHTML=`
     <div class="modal-backdrop">
@@ -2611,10 +2701,10 @@ function openEditGroupModal(dateStr, room){
           </div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">Check-in Date *</label>
-              <input class="form-input" id="eg-checkin" type="date" value="${b.checkin||''}" />
+              <input class="form-input" id="eg-checkin" type="date" value="${b.checkin||''}" oninput="refreshRoomSelects('#edit-group-list .group-edit-room-select, #eg-room','eg-checkin','eg-checkout','${room}')" />
             </div>
             <div class="form-group"><label class="form-label">Check-out Date</label>
-              <input class="form-input" id="eg-checkout" type="date" value="${b.checkout||''}" />
+              <input class="form-input" id="eg-checkout" type="date" value="${b.checkout||''}" oninput="refreshRoomSelects('#edit-group-list .group-edit-room-select, #eg-room','eg-checkin','eg-checkout','${room}')" />
             </div>
           </div>
 
@@ -2711,7 +2801,12 @@ function addEditGroupRow(){
   row.style.cssText='display:grid;grid-template-columns:1fr 110px auto auto;gap:6px;align-items:center;';
   // Default to the shared room field (eg-room) or first ALL_ROOMS entry
   const defRoom=(document.getElementById('eg-room')||{}).value||ALL_ROOMS[0];
-  const roomOpts=ALL_ROOMS.map(r=>`<option value="${r}"${r===defRoom?' selected':''}>${r}</option>`).join('');
+  const _eci=(document.getElementById('eg-checkin')||{}).value||'';
+  const _eco=(document.getElementById('eg-checkout')||{}).value||'';
+  // We don't know the original excludeRoom here; use eg-room's original booking room stored on the modal
+  const _exRoom=document.querySelector('#edit-group-list .group-edit-room-select')?
+    (document.querySelector('#edit-group-list .group-edit-room-select').dataset.origRoom||defRoom):defRoom;
+  const roomOpts=buildRoomOptionHtml(defRoom,getOccupiedRoomsForDates(_eci,_eco,_exRoom));
   row.innerHTML=`<input type="text" class="group-edit-name-input form-input" placeholder="New Person — First & Last Name" style="font-size:13px;" /><select class="form-input group-edit-room-select" style="font-size:12px;padding:6px 6px;" onchange="toggleEditGroupGuesthouseSection()">${roomOpts}</select><input type="checkbox" class="group-edit-breakfast-tick" title="Ate breakfast physically" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;justify-self:center;" /><button class="group-name-remove" onclick="this.closest('.group-name-row').remove()" title="Remove">✕</button>`;
   list.appendChild(row);
   row.querySelector('input').focus();
@@ -2955,6 +3050,136 @@ async function printBreakfastList(){
 }
 function closeModal(){document.getElementById('modal-container').innerHTML='';}
 
+// ── BLOCK / UNBLOCK ROOM ──────────────────────────────────
+function openBlockModal(dateStr, room){
+  const fmt=formatDateStr(dateStr);
+  const html=`<div class="modal-backdrop">
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header" style="background:#fef2f2;border-bottom:1px solid #fca5a5;">
+        <div>
+          <div class="modal-title" style="color:#dc2626;display:flex;align-items:center;gap:8px;"><i class="ti ti-ban"></i> Block Room</div>
+          <div class="modal-subtitle">${room} · ${fmt}</div>
+        </div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">This room will be marked as unavailable and cannot be booked on the selected dates.</p>
+        <div class="form-group full"><label class="form-label">Reason <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+          <input class="form-input" id="block-reason" placeholder="e.g. Maintenance, Deep clean, Owner use..." />
+        </div>
+        <div class="form-row" style="margin-top:10px;">
+          <div class="form-group"><label class="form-label">From Date</label>
+            <input class="form-input" id="block-from" type="date" value="${dateStr}" />
+          </div>
+          <div class="form-group"><label class="form-label">To Date <span style="font-weight:400;color:var(--muted)">(inclusive)</span></label>
+            <input class="form-input" id="block-to" type="date" value="${dateStr}" />
+          </div>
+        </div>
+        <div id="block-count-preview" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-primary" style="background:#dc2626;border-color:#dc2626;" onclick="confirmBlockRoom('${room}')"><i class="ti ti-ban" style="font-size:13px"></i> Block Room</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('modal-container').innerHTML=html;
+  // Live preview of date count
+  const fromEl=document.getElementById('block-from');
+  const toEl=document.getElementById('block-to');
+  const preview=document.getElementById('block-count-preview');
+  function updatePreview(){
+    const f=fromEl.value,t=toEl.value;
+    if(!f||!t)return;
+    const fd=new Date(f),td=new Date(t);
+    if(td<fd){preview.textContent='⚠ End date must be after start date';preview.style.color='#dc2626';return;}
+    let count=0;const d=new Date(fd);while(d<=td){count++;d.setDate(d.getDate()+1);}
+    preview.textContent=`${count} day${count!==1?'s':''} will be blocked`;
+    preview.style.color='var(--muted)';
+  }
+  fromEl.addEventListener('input',updatePreview);
+  toEl.addEventListener('input',updatePreview);
+  updatePreview();
+}
+
+function confirmBlockRoom(room){
+  const reason=document.getElementById('block-reason').value.trim();
+  const fromStr=document.getElementById('block-from').value;
+  const toStr=document.getElementById('block-to').value;
+  if(!fromStr||!toStr){showToast('Please select dates','error');return;}
+  const fd=new Date(fromStr),td=new Date(toStr);
+  if(td<fd){showToast('End date must be after start date','error');return;}
+  let count=0;
+  const d=new Date(fd);
+  while(d<=td){
+    const ds=dateKey(d);
+    blockRoom(ds,room,reason);
+    count++;
+    d.setDate(d.getDate()+1);
+  }
+  closeModal();
+  showToast(`${room} blocked for ${count} day${count!==1?'s':''}${reason?' · '+reason:''}`, 'success');
+  renderView();
+}
+
+function openUnblockModal(dateStr, room){
+  const reason=getBlockedReason(dateStr,room);
+  const fmt=formatDateStr(dateStr);
+  const html=`<div class="modal-backdrop">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header" style="background:#fef2f2;border-bottom:1px solid #fca5a5;">
+        <div>
+          <div class="modal-title" style="color:#dc2626;display:flex;align-items:center;gap:8px;"><i class="ti ti-ban"></i> Room Blocked</div>
+          <div class="modal-subtitle">${room} · ${fmt}</div>
+        </div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;">
+          <i class="ti ti-ban" style="font-size:22px;color:#dc2626;flex-shrink:0;margin-top:1px;"></i>
+          <div>
+            <div style="font-size:14px;font-weight:600;color:#dc2626;">${room} is blocked</div>
+            ${reason?`<div style="font-size:12px;color:#9b1c1c;margin-top:3px;">${reason}</div>`:'<div style="font-size:12px;color:#9b1c1c;margin-top:3px;">No reason given</div>'}
+          </div>
+        </div>
+        <p style="font-size:13px;color:var(--muted);">Would you like to unblock this room so bookings can be made again?</p>
+        <div class="form-row" style="margin-top:12px;">
+          <div class="form-group"><label class="form-label">Unblock From</label>
+            <input class="form-input" id="unblock-from" type="date" value="${dateStr}" />
+          </div>
+          <div class="form-group"><label class="form-label">Unblock To</label>
+            <input class="form-input" id="unblock-to" type="date" value="${dateStr}" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-primary" onclick="confirmUnblockRoom('${room}')"><i class="ti ti-lock-open" style="font-size:13px"></i> Unblock Room</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('modal-container').innerHTML=html;
+}
+
+function confirmUnblockRoom(room){
+  const fromStr=document.getElementById('unblock-from').value;
+  const toStr=document.getElementById('unblock-to').value;
+  if(!fromStr||!toStr){showToast('Please select dates','error');return;}
+  const fd=new Date(fromStr),td=new Date(toStr);
+  if(td<fd){showToast('End date must be after start date','error');return;}
+  let count=0;
+  const d=new Date(fd);
+  while(d<=td){
+    const ds=dateKey(d);
+    unblockRoom(ds,room);
+    count++;
+    d.setDate(d.getDate()+1);
+  }
+  closeModal();
+  showToast(`${room} unblocked for ${count} day${count!==1?'s':''}`, 'success');
+  renderView();
+}
+
 // ── CUSTOM CONFIRM DIALOG ─────────────────────────────────
 function showConfirm(message, onConfirm, opts){
   opts=opts||{};
@@ -3010,7 +3235,9 @@ function showConfirm(message, onConfirm, opts){
 // ── ADD / EDIT MODAL ──────────────────────────────────────
 function openAddModal(dateStr,room,ovf){
   const isOvf=ovf||isOverflow(room||'');
-  const roomOptions=ALL_ROOMS.map(r=>`<option value="${r}"${r===room?' selected':''}>${r}</option>`).join('');
+  window._editingOrigRoom=null;
+  const _addOcc=getOccupiedRoomsForDates(dateStr,'',room||null);
+  const roomOptions=buildRoomOptionHtml(room,_addOcc);
   let html=`<div class="modal-backdrop">
     <div class="modal">
       <div class="modal-header${isOvf?' overflow-header':''}">
@@ -3070,8 +3297,8 @@ function openAddModal(dateStr,room,ovf){
           <div class="form-group"><label class="form-label">Room</label><select class="form-input" id="f-room">${roomOptions}</select></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Check-in Date *</label><input class="form-input" id="f-checkin" type="date" value="${dateStr||''}" oninput="calcGhTotal()" /></div>
-          <div class="form-group"><label class="form-label">Check-out Date</label><input class="form-input" id="f-checkout" type="date" oninput="calcGhTotal()" /></div>
+          <div class="form-group"><label class="form-label">Check-in Date *</label><input class="form-input" id="f-checkin" type="date" value="${dateStr||''}" oninput="calcGhTotal();refreshRoomSelects('#f-room','f-checkin','f-checkout',window._editingOrigRoom||null)" /></div>
+          <div class="form-group"><label class="form-label">Check-out Date</label><input class="form-input" id="f-checkout" type="date" oninput="calcGhTotal();refreshRoomSelects('#f-room','f-checkin','f-checkout',window._editingOrigRoom||null)" /></div>
         </div>`;
   if(isOvf){
     html+=`<div class="overflow-section">
@@ -3167,6 +3394,7 @@ function openAddModal(dateStr,room,ovf){
   </div>
   <div class="modal-footer">
     <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+    ${dateStr&&room?`<button class="btn-secondary" style="background:#fef2f2;border-color:#fca5a5;color:#dc2626;font-weight:600;" onclick="closeModal();openBlockModal('${dateStr}','${room}')"><i class="ti ti-ban" style="font-size:13px"></i> Block Room</button>`:''}
     <button class="btn-secondary" style="background:var(--overflow-bg);border-color:var(--overflow-border);color:var(--overflow-text);font-weight:600;" onclick="switchToGroupBooking('${dateStr||''}','${room||''}')"><i class="ti ti-users" style="font-size:13px"></i> Book Group Instead</button>
     <button class="btn-primary" id="save-btn" onclick="saveBooking('${dateStr||''}','${room||''}',${isOvf})">Save Booking</button>
   </div></div></div>`;
@@ -3788,6 +4016,7 @@ function editBooking(dateStr,room){
     document.getElementById('f-checkin').value=b.checkin||dateStr;
     document.getElementById('f-checkout').value=b.checkout||'';
     document.getElementById('f-room').value=room;
+    window._editingOrigRoom=room;
     window._paid=b.paid!==false;window._dirty=false;window._cash=!!b.cash_payment;window._editingCheckedIn=!!b.checked_in;
     window._editingVoucher=b.voucher||null;
     window._pdfFiles={invoice:null,voucher:null,aroma:null};
@@ -4842,6 +5071,7 @@ async function doLogout(){
 }
 
 async function startApp(){
+  loadBlockedRooms();
   document.getElementById('login-page').style.display='none';
   document.getElementById('loader').style.display='flex';
   const ok=await setupTables();
@@ -6593,49 +6823,19 @@ async function saveWeekendWorkers(){
   openAssignWeekendModal();
 }
 
-function calcWhHours(){
-  const start=document.getElementById('wh-start').value;
-  const end=document.getElementById('wh-end').value;
-  const display=document.getElementById('wh-calc-display');
-  if(start&&end){
-    const [sh,sm]=start.split(':').map(Number);
-    const [eh,em]=end.split(':').map(Number);
-    let mins=(eh*60+em)-(sh*60+sm);
-    if(mins<0)mins+=24*60; // overnight shift
-    const hrs=Math.round(mins/30)*0.5; // round to nearest 0.5
-    document.getElementById('wh-hrs').value=hrs>0?hrs:'';
-    if(display){
-      display.textContent=hrs>0?`= ${hrs} hr${hrs!==1?'s':''}`:'\u00a0';
-      display.style.color=hrs>0?'var(--accent)':'var(--muted)';
-    }
-  } else {
-    if(display){display.textContent='\u00a0';}
-  }
-}
 function addWeekendHours(dateStr,workerId,workerName){
   const w=workers.find(x=>x.id===workerId);
   document.getElementById('modal-container').innerHTML=`
     <div class="modal-backdrop">
-      <div class="modal" style="max-width:380px;">
+      <div class="modal" style="max-width:360px;">
         <div class="modal-header" style="background:var(--overflow-head);border-bottom-color:var(--overflow-border);">
           <div><div class="modal-title" style="color:var(--overflow-text);">Log Weekend Hours</div>
           <div class="modal-subtitle">${workerName} · ${formatDateStr(dateStr)}</div></div>
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-            <div class="form-group full" style="margin:0;">
-              <label class="form-label">Start Time</label>
-              <input class="form-input" id="wh-start" type="time" oninput="calcWhHours()" />
-            </div>
-            <div class="form-group full" style="margin:0;">
-              <label class="form-label">End Time</label>
-              <input class="form-input" id="wh-end" type="time" oninput="calcWhHours()" />
-            </div>
-          </div>
-          <div style="text-align:center;font-size:12px;font-weight:600;margin-bottom:10px;min-height:18px;" id="wh-calc-display">&nbsp;</div>
-          <div class="form-group full"><label class="form-label">Hours Worked <span style="font-weight:400;color:var(--muted);font-size:11px;">(auto-filled or enter manually)</span></label>
-            <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" placeholder="e.g. 8" />
+          <div class="form-group full"><label class="form-label">Hours Worked</label>
+            <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" placeholder="e.g. 8" autofocus />
             ${w&&w.hourly_rate?`<div style="font-size:11px;color:var(--accent);margin-top:3px;">R ${parseFloat(w.hourly_rate).toFixed(2)}/hr</div>`:''}
           </div>
           <div class="form-group full"><label class="form-label">Notes</label>
@@ -6647,7 +6847,7 @@ function addWeekendHours(dateStr,workerId,workerName){
         </div>
       </div>
     </div>`;
-  setTimeout(()=>{ const el=document.getElementById('wh-start'); if(el)el.focus(); },50);
+  setTimeout(()=>{ const el=document.getElementById('wh-hrs'); if(el)el.focus(); },50);
 }
 
 async function saveWeekendHours(dateStr,workerId){
@@ -6667,25 +6867,14 @@ function editWeekendHours(entryId,dateStr,workerId,workerName,currentHrs){
   const isPending=!currentHrs||currentHrs===0;
   document.getElementById('modal-container').innerHTML=`
     <div class="modal-backdrop">
-      <div class="modal" style="max-width:380px;">
+      <div class="modal" style="max-width:360px;">
         <div class="modal-header" style="background:var(--overflow-head);border-bottom-color:var(--overflow-border);">
           <div><div class="modal-title" style="color:var(--overflow-text);">${isPending?'Enter Hours Worked':'Edit Hours'}</div>
           <div class="modal-subtitle">${workerName} · ${formatDateStr(dateStr)}</div></div>
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
         <div class="modal-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-            <div class="form-group full" style="margin:0;">
-              <label class="form-label">Start Time</label>
-              <input class="form-input" id="wh-start" type="time" oninput="calcWhHours()" />
-            </div>
-            <div class="form-group full" style="margin:0;">
-              <label class="form-label">End Time</label>
-              <input class="form-input" id="wh-end" type="time" oninput="calcWhHours()" />
-            </div>
-          </div>
-          <div style="text-align:center;font-size:12px;font-weight:600;margin-bottom:10px;min-height:18px;" id="wh-calc-display">&nbsp;</div>
-          <div class="form-group full"><label class="form-label">Hours Worked <span style="font-weight:400;color:var(--muted);font-size:11px;">(auto-filled or enter manually)</span></label>
+          <div class="form-group full"><label class="form-label">Hours Worked</label>
             <input class="form-input" id="wh-hrs" type="number" min="0" max="24" step="0.5" value="${isPending?'':currentHrs}" placeholder="e.g. 6" />
             ${w&&w.hourly_rate?`<div style="font-size:11px;color:var(--accent);margin-top:3px;">R ${parseFloat(w.hourly_rate).toFixed(2)}/hr</div>`:''}
           </div>
@@ -6697,7 +6886,7 @@ function editWeekendHours(entryId,dateStr,workerId,workerName,currentHrs){
         </div>
       </div>
     </div>`;
-  setTimeout(()=>{ const el=document.getElementById('wh-start'); if(el)el.focus(); },50);
+  setTimeout(()=>{ const el=document.getElementById('wh-hrs'); if(el){el.focus();if(!isPending)el.select();} },50);
 }
 
 async function updateWeekendHours(entryId){
